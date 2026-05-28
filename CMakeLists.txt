@@ -27,11 +27,11 @@ add_executable(ble_smoke_detector main.cpp
         BLE/BleConnectionTracker.cpp
         CircularBuffer/Debugging.cpp
         Packet/Peer.cpp
+        Packet/Base.cpp
         Packet/PacketBase.cpp
         Packet/Message.cpp
         Packet/BinaryReader.cpp
         Packet/BinaryWriter.cpp
-        Packet/ProtocolWriter.cpp
 )
 
 include_directories(include CircularBuffer)

@@ -2,43 +2,26 @@
 
 #include <cstdint>
 
+#include "Base.h"
 #include "PacketTypes.h"
 
-class PacketBase {
+class PacketBase : public Base {
 public:
     explicit PacketBase(uint8_t type);
 
     PacketBase(uint8_t type, uint8_t ttl, uint64_t timestamp, uint8_t flags, uint64_t sender);
 
-    virtual ~PacketBase() = default;
-
-    [[nodiscard]] uint8_t getPacketType() const;
-
-    [[nodiscard]] uint8_t getPacketTtl() const;
-
-    [[nodiscard]] uint64_t getPacketTimestamp() const;
-
-    [[nodiscard]] uint64_t getPacketTimestampMs() const;
-
-    [[nodiscard]] uint8_t getPacketFlags() const;
+    PacketBase(uint8_t type, uint8_t version, BinaryReader &reader);
 
     [[nodiscard]] uint64_t getPacketSenderId() const;
 
-    void setPacketTtl(uint8_t ttl);
-
-    void setPacketTimestamp(uint64_t timestamp);
-
-    void setPacketFlags(uint8_t flags);
-
     void setPacketSenderId(uint64_t senderId);
 
-protected:
-    void setPacketType(PacketType type);
+
+    void writePacket(std::vector<uint8_t> &vector) override;
+
+    void writePacketPayload(BinaryWriter &writer) override;
 
 private:
-    uint8_t packet_type = 0;
-    uint8_t packet_ttl = 0;
-    uint64_t packet_timestamp = 0;
-    uint8_t packet_flags = 0;
     uint64_t packet_sender_id = 0;
 };

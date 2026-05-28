@@ -17,7 +17,6 @@
 #include "hci.h"
 #include "gap.h"
 #include "pico/unique_id.h"
-#include "Packet/ProtocolWriter.h"
 #include "BLE/BleConnection.h"
 #include "hardware/sync.h"
 #include <cinttypes>
@@ -731,6 +730,7 @@ void generateMessageIfNeeded() {
         outBuffer.clear();
         message.setMessageFlags(0);
         buffer.write_uint32(timestamp_ms);
+        buffer.write_uint8('-');
         buffer.write_uint64(sender);
         const std::string messageIdString(reinterpret_cast<const char *>(outBuffer.data()), outBuffer.size());
         message.setMessageId(messageIdString);
@@ -745,7 +745,7 @@ void generateMessageIfNeeded() {
         name_writer.write_uint8_hex16(local_addr[BD_ADDR_LEN - 1]);
         message.setSenderNickname(std::string(reinterpret_cast<const char *>(name_buffer.data()), name_buffer.size()));
 
-        if (const Message *messageIfNew = connection_tracker.storeMessageAndReturnIfNew(message)) {
+        if (Base *messageIfNew = connection_tracker.storeMessageAndReturnIfNew(message)) {
             //our messages will always be new
             connection_tracker.enqueueBroadcastPacket(messageIfNew);
             global_activity++;

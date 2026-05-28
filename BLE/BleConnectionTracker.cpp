@@ -8,7 +8,6 @@
 #include "BleConnectionTracker.h"
 
 #include "../include/int_types.h"
-#include "../Packet/ProtocolWriter.h"
 #include "../Packet/BinaryWriter.h"
 
 #ifdef MOCK_PICO_PI
@@ -54,7 +53,7 @@ BleConnection &BleConnectionTracker::connectionForConnHandle(const hci_con_handl
     return connections[connection_handle];
 }
 
-const Message *BleConnectionTracker::storeMessageAndReturnIfNew(Message &message) {
+Message *BleConnectionTracker::storeMessageAndReturnIfNew(Message &message) {
     const auto id = message.getMessageId();
     if (const auto search = messages.find(id); search != messages.end()) {
         return nullptr; //message was found so it not new
@@ -84,13 +83,13 @@ Peer &BleConnectionTracker::checkSenderInPeers(const uint64_t sender) {
     return peers[sender];
 }
 
-void BleConnectionTracker::enqueueBroadcastPacket(const PacketBase *packet) {
+void BleConnectionTracker::enqueueBroadcastPacket(Base *packet) {
     if (packet->getPacketTtl() > 0) {
         broadcast_packets_to_send_list.push_back(packet);
     }
 }
 
-void BleConnectionTracker::enqueueBroadcastPacket(const PacketBase *packet, BleConnection *from_connection,
+void BleConnectionTracker::enqueueBroadcastPacket(Base *packet, BleConnection *from_connection,
                                                   Peer *from_peer) {
     packets_connections_sent_list.emplace(packet, from_connection);
     packets_peers_sent_list.emplace(packet, from_peer);
@@ -187,12 +186,12 @@ void BleConnectionTracker::printStats() {
     const uint16_t p_seconds = seconds - (minutes * 60);
     const uint16_t p_minutes = minutes - (hours * 60u);
     LOG_DEBUG("[%02u:%02u:%02u.%03u]", hours, p_minutes, p_seconds, p_ms);
-    LOG_DEBUG("%d %d:%d", timestamp_offset_ms>0, used_heap, free_heap);
+    LOG_DEBUG(" %d %d:%d ", timestamp_offset_ms>0, used_heap, free_heap);
 
     auto active_connections_count = 0;
     for (auto &connection: connections | std::views::values) {
         if (connection.isConnected()) {
-            LOG_DEBUG("{0x%x:%d-%s}", connection.getConnectionHandle(), connection.getRole(),
+            LOG_DEBUG("{0x%x:%d-%s} ", connection.getConnectionHandle(), connection.getRole(),
                       bd_addr_to_str(connection.getAddress()));
             active_connections_count++;
         }
@@ -205,13 +204,13 @@ void BleConnectionTracker::printStats() {
 #pragma GCC push_options
 #pragma GCC optimize ("O0")
 
-bool BleConnectionTracker::SendPacketToConnection(const PacketBase &packet, BleConnection &ble_connection) {
+bool BleConnectionTracker::SendPacketToConnection(Base &packet, BleConnection &ble_connection) {
     std::vector<uint8_t> packet_data;
-    ProtocolWriter::writePacket(packet_data, &packet);
+    packet.writePacket(packet_data);
 
     if (packet_data.size() > ble_connection.getMtu()) {
         //TODO - implement fragment creation
-        assert(0);
+        ASSERT_DEBUG(0);
     }
 
     const uint16_t con_handle = ble_connection.getConnectionHandle();
@@ -264,15 +263,15 @@ void BleConnectionTracker::sendPackets() {
     };
     auto available_connections = connections | std::views::values | std::views::filter(available);
 
-    auto packet_needed = [this](const std::pair<const PacketBase *, const BleConnection *> &targeted) {
+    auto packet_needed = [this](const std::pair<Base *, BleConnection *> &targeted) {
         auto [begin, end] = packets_connections_sent_list.equal_range(targeted.first);
-        auto matches_connection = [targeted](const std::pair<const PacketBase *, const BleConnection *> &sent_to) {
+        auto matches_connection = [targeted](const std::pair<Base *, BleConnection *> &sent_to) {
             return sent_to.second->getConnectionHandle() == targeted.second->getConnectionHandle();
         };
         return std::ranges::find_if(begin, end, matches_connection) == end;
     };
 
-    std::set<const PacketBase *> broadcast_packets_to_remove;
+    std::set<Base *> broadcast_packets_to_remove;
     for (auto packet: broadcast_packets_to_send_list) {
         bool packet_sent = false;
         // LOG_DEBUG("Sending Broadcast Packet %p\n", packet);
@@ -296,7 +295,7 @@ void BleConnectionTracker::sendPackets() {
             broadcast_packets_to_remove.emplace(packet);
         }
     }
-    auto sent = [broadcast_packets_to_remove](const PacketBase *packet) {
+    auto sent = [broadcast_packets_to_remove](Base *packet) {
         return broadcast_packets_to_remove.contains(packet);
     };
     const auto ret = std::ranges::remove_if(broadcast_packets_to_send_list, sent);
@@ -388,7 +387,7 @@ void BleConnectionTracker::notifyRawPacket(const hci_con_handle_t con_handle) {
     auto packets_for_handle = raw_packet_to_notify.equal_range(con_handle);
     if (packets_for_handle.first != raw_packet_to_notify.end()) {
         const auto connection = connections[con_handle];
-        assert(connection.hasData());
+        ASSERT_DEBUG(connection.hasData());
         const auto &data = packets_for_handle.first->second;
         const auto ret = att_server_notify(con_handle, connection.getPacketCharacteristicValueHandle(), data.data(),
                                            data.size());
@@ -414,7 +413,7 @@ void BleConnectionTracker::writeRawPacket(const hci_con_handle_t con_handle) {
     auto packets_for_handle = raw_packet_to_write.equal_range(con_handle);
     if (packets_for_handle.first != raw_packet_to_write.end()) {
         const auto connection = connections[con_handle];
-        assert(connection.hasData());
+        ASSERT_DEBUG(connection.hasData());
         auto &data = packets_for_handle.first->second;
         const auto ret = gatt_client_write_value_of_characteristic_without_response(
             con_handle, connection.getPacketCharacteristicValueHandle(), data.size(), data.data());

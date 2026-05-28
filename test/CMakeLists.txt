@@ -14,7 +14,7 @@ include_directories(../include ../CircularBuffer)
 add_executable(tests
         ../BLE/BleConnection.cpp
         ../BLE/BleConnectionTracker.cpp
-        ../Packet/ProtocolWriter.cpp
+        ../Packet/Base.cpp
         ../Packet/PacketBase.cpp
         ../Packet/Peer.cpp
         ../Packet/BinaryReader.cpp
