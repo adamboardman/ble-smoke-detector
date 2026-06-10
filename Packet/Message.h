@@ -14,6 +14,8 @@ public:
 
     Message(uint8_t type, uint8_t version, BinaryReader &reader);
 
+    ~Message() override = default;
+
     void setMessageFlags(uint8_t flags);
 
     [[nodiscard]] bool isRelay() const {

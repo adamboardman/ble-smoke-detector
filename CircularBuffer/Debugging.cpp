@@ -1,5 +1,11 @@
 #include "Debugging.h"
 
+#ifdef MOCK_PICO_PI
+#include "../test/pico_pi_mocks.h"
+#else
+#include "pico/time.h"
+#endif
+
 CircularBuffer<char> serialLogBuffer(3000);
 
 #define SERIAL_LOG_BUFFER_LEN 160
@@ -13,12 +19,15 @@ void printAvailableLogging() {
     }
 
     while (!serialLogBuffer.empty()) {
-        if (const auto len = serialLogBuffer.consume_line(line, SERIAL_LOG_BUFFER_LEN-1); line[len-1]=='\n') {
-            line[len-1] = '\0';
-        } else {
-            line[len] = '\0';
+        auto len = serialLogBuffer.consume_line(line, SERIAL_LOG_BUFFER_LEN-1);
+        if (line[len-1]=='\n') {
+            len--;
         }
-        printf("%s\n",line);
+        for (int i=0; i<len; i++) {
+            putchar(line[i]);
+        }
+        putchar('\n');
+        sleep_ms(1);
     }
     serialLogBuffer.clear_if_empty(); //try to keep logging within only one block
 }

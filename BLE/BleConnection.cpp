@@ -3,11 +3,13 @@
 
 #include <cstring>
 
+#ifdef PICO_BOARD
 #ifdef MOCK_PICO_PI
 #include "../test/packet_repeater_mocks.h"
 #include "../test/pico_pi_mocks.h"
 #else
 #include "hardware/timer.h"
+#endif
 #endif
 
 void BleConnection::setConnectionHandle(const uint16_t hci_con_handle) {

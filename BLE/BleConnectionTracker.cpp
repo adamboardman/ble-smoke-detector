@@ -10,6 +10,7 @@
 #include "../include/int_types.h"
 #include "../Packet/BinaryWriter.h"
 
+#ifdef PICO_BOARD
 #ifdef MOCK_PICO_PI
 #include "../test/packet_repeater_mocks.h"
 #include "../test/pico_pi_mocks.h"
@@ -17,6 +18,7 @@
 #include "pico/time.h"
 #include "hardware/timer.h"
 #include "ble/att_server.h"
+#endif
 #endif
 
 extern BleConnectionTracker *connection_tracker_ptr;

@@ -2,7 +2,7 @@
 
 #include "CircularBuffer.h"
 
-#define DEBUG_BUILD
+// #define DEBUG_BUILD
 
 extern CircularBuffer<char> serialLogBuffer;
 void printAvailableLogging();

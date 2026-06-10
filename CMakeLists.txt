@@ -19,6 +19,7 @@ set(CMAKE_C_STANDARD 23)
 set(CMAKE_CXX_STANDARD 23)
 
 add_definitions(-DPICO_ENTER_USB_BOOT_ON_EXIT)
+add_definitions(-DCYW43_PIO_CLOCK_DIV_DYNAMIC=1)
 
 pico_sdk_init()
 

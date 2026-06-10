@@ -26,8 +26,10 @@
 #include "hardware/clocks.h"
 #include "hardware/pll.h"
 #include "pico/binary_info/code.h"
+#include "pico/cyw43_driver.h"
 
 const uint EXIT_GPIO_PIN = 28;
+const uint KEEP_ALIVE_PIN = 16;
 const uint SMOKE_SEEN_PIN = 17;
 const uint LIFE_CHECK_PIN = 18;
 
@@ -683,7 +685,7 @@ void gpio_callback(const uint gpio, const uint32_t events) {
     if (gpio == EXIT_GPIO_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
         keep_running = false;
     }
-    if (gpio == SMOKE_SEEN_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
+    if (gpio == SMOKE_SEEN_PIN && (events & GPIO_IRQ_EDGE_RISE)) {
         smoke_seen = true;
     }
     if (gpio == LIFE_CHECK_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
@@ -691,8 +693,20 @@ void gpio_callback(const uint gpio, const uint32_t events) {
     }
 }
 
+/**
+ * Known working values (picow):
+ * divider = speed
+ * 2,0 = 133kHz (default - 29mA)
+ * 2,0 = 63kHz (lowest before divider needed - 21mA)
+ * 1,0 = 44kHz (with logging - 20mA)
+ * 1,0 = 18kHz (no logging - 16mA)
+ * @param speed in kHz
+ */
 void reduce_clock(const uint32_t speed) {
     set_sys_clock_khz(speed * KHZ, false);
+    if (speed < 63) {
+        cyw43_set_pio_clkdiv_int_frac8(1, 0);
+    }
 }
 
 void generateMessageIfNeeded() {
@@ -761,30 +775,42 @@ void setup_gpio_callback() {
 
     gpio_init(SMOKE_SEEN_PIN);
     gpio_set_dir(SMOKE_SEEN_PIN, GPIO_IN);
-    gpio_pull_up(SMOKE_SEEN_PIN);
+    gpio_pull_down(SMOKE_SEEN_PIN);
 
     gpio_init(LIFE_CHECK_PIN);
     gpio_set_dir(LIFE_CHECK_PIN, GPIO_IN);
     gpio_pull_up(LIFE_CHECK_PIN);
 
     gpio_set_irq_enabled_with_callback(EXIT_GPIO_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
-    gpio_set_irq_enabled_with_callback(SMOKE_SEEN_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+    gpio_set_irq_enabled_with_callback(SMOKE_SEEN_PIN, GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
     gpio_set_irq_enabled_with_callback(LIFE_CHECK_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+}
+
+void setup_keep_alive_pin() {
+    //We pull this pin down to ensure we keep our power supply
+    gpio_init(KEEP_ALIVE_PIN);
+    gpio_set_dir(KEEP_ALIVE_PIN, GPIO_IN);
+    gpio_pull_down(KEEP_ALIVE_PIN);
 }
 
 int main() {
     bi_decl(bi_program_description(
         "BLE Smoke Detector - designed to be powered up by a smoke detector."));
     bi_decl(bi_1pin_with_name(EXIT_GPIO_PIN, "Switch - pull to ground to exit the loop and return to usb-disk mode"));
-    bi_decl(bi_1pin_with_name(SMOKE_SEEN_PIN, "Switch - pull to ground to indicate smoke has been detected"));
+    bi_decl(bi_1pin_with_name(SMOKE_SEEN_PIN, "Input - we pull this down, will be pulled up to indicate smoke has been detected"));
     bi_decl(bi_1pin_with_name(LIFE_CHECK_PIN, "Switch - pull to ground to send a still alive message"));
+    bi_decl(bi_1pin_with_name(KEEP_ALIVE_PIN, "Feedback - we pull this down when we boot, then let float when message sent"));
 
-    //reduce_clock(18); //Meshtastic folk have managed to get things working this slow
 #if (PICO_RP2040)
-    reduce_clock(63); //slower than this and things get funky in CYW43 land
+#ifdef DEBUG_BUILD
+    reduce_clock(44);// 44 slower than this and things get funky with the debug logging
+#else
+    reduce_clock(18);// 18 this is possible if you turn off the logging - serial printf mutex hell
+#endif
 #endif
     stdio_init_all();
 
+    setup_keep_alive_pin();
     setup_gpio_callback();
 
     sleep_ms(1000); //wait for logging to be attached - remove this once we are working ok
@@ -836,6 +862,8 @@ int main() {
 
     auto lastSleepOrActivity = time_us_32();
     uint32_t lastFlash = 0;
+    auto boot_time = time_us_32();
+    auto last_try_to_off = time_us_32();
     auto lastScan = time_us_32();
     auto lastRssiUpdate = time_us_32();
     bool rssi_update_in_progress = false;
@@ -868,13 +896,24 @@ int main() {
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
             lastFlash = time_us_32();
         }
+        if ((loopStart - last_try_to_off) > twenty_seconds_in_us) {
+			//auto-turn off if we have nothing to broadcast
+            if (!connection_tracker.havePacketsToSend() || (loopStart - boot_time) > five_minutes_in_us) {
+                if (gpio_is_pulled_down(KEEP_ALIVE_PIN)) {
+                    LOG_DEBUG("We don't need to be kept alive");
+                    gpio_set_pulls(KEEP_ALIVE_PIN, false, false);
+                }
+            } else {
+                last_try_to_off = time_us_32();
+            }
+		}
         if ((loopStart - lastRssiUpdate) > five_minutes_in_us) {
             rssi_update_in_progress = connection_tracker.requestNextRssi(true);
             lastRssiUpdate = time_us_32();
         } else if (rssi_update_in_progress) {
             rssi_update_in_progress = connection_tracker.requestNextRssi(false);
         }
-        if ((loopStart - lastScan) > ten_minutes_in_us) {
+        if ((loopStart - lastScan) > thirty_seconds_in_us) {
             start_scanning_for_local_nodes();
             lastScan = time_us_32();
         }
@@ -883,35 +922,10 @@ int main() {
             lastCleanup = time_us_32();
         }
 
-        bool slept = false;
-        //nothing happened in the last 2seconds so lets sleep
-        while ((loopStart - lastSleepOrActivity) > two_seconds_in_us && last_activity == global_activity) {
-            connection_tracker.printStats();
-            LOG_DEBUG("We can sleep\n");
-            printAvailableLogging();
-#if (PICO_RP2040)
-            const auto interrupts = *reinterpret_cast<io_rw_32 *>(PPB_BASE + M0PLUS_NVIC_ISER_OFFSET);
-#endif
-            const auto time_before = static_cast<uint32_t>(time_us_64() & 0xffffffff);
-            __wfi(); //similar power consumption to sleep_ms, but less logging, but also less led flashing
-            const auto time_after = static_cast<uint32_t>(time_us_64() & 0xffffffff);
-#if (PICO_RP2040)
-            LOG_DEBUG("slept: %" PRIu32 "us, int: 0b%" PRIb32 "\n", time_after - time_before, interrupts);
-#else
-            LOG_DEBUG("slept: %" PRIu32 "us\n", time_after - time_before);
-#endif
-            printAvailableLogging();
-            slept = true;
-            //wfe - 1us sleep
-            //wfi - infinite sleep (sometimes)
-            //wfi - 10ms,44ms,44ms,44ms,44ms,44ms,44ms,44ms,44ms,infinite sleep (other times)
-        }
-        if (slept || last_activity != global_activity) {
+        if (last_activity != global_activity) {
             lastSleepOrActivity = time_us_32();
             last_activity = global_activity;
         }
-        if (!slept) {
-            sleep_ms(40);
-        }
+        best_effort_wfe_or_timeout(make_timeout_time_ms(100));
     }
 }

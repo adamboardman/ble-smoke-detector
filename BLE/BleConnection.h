@@ -5,11 +5,13 @@
 #include <map>
 #include <string>
 
+#ifdef PICO_BOARD
 #ifdef MOCK_PICO_PI
 #include "../test/packet_repeater_mocks.h"
 #else
 #include "bluetooth.h"
 #include "ble/gatt_client.h"
+#endif
 #endif
 
 // PRIMARY_SERVICE, 298cfeca-a10d-49ee-8a74-e513547f7ef7

@@ -9,6 +9,8 @@
 
 inline auto build_time_ms = 1755685519; //Occasionally update this, us since 1970
 inline auto two_seconds_in_us = 1000 * 1000 * 2;
+inline auto twenty_seconds_in_us = 1000 * 1000 * 20;
+inline auto thirty_seconds_in_us = 1000 * 1000 * 30;
 inline auto two_minutes_in_us = 1000 * 1000 * 60 * 5;
 inline auto five_minutes_in_us = 1000 * 1000 * 60 * 5;
 inline auto ten_minutes_in_us = 1000 * 1000 * 60 * 10;
