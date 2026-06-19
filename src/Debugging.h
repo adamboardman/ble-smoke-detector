@@ -1,8 +1,10 @@
 #pragma once
 
+#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
+
 #include "CircularBuffer.h"
 
-// #define DEBUG_BUILD
+#define DEBUG_BUILD
 
 extern CircularBuffer<char> serialLogBuffer;
 void printAvailableLogging();
@@ -33,4 +35,6 @@ void printAvailableLogging();
 #define LOG_ERROR(...)
 #define LOG_CRIT(...)
 #define LOG_TRACE(...)
+#endif
+
 #endif

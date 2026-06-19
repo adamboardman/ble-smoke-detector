@@ -6,8 +6,11 @@
 #include <vector>
 #include "assert.h"
 #include "BinaryWriter.h"
+#include "include/int_types.h"
+
+#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
 #include "Debugging.h"
-#include "int_types.h"
+#endif
 
 Base::Base(const uint8_t type)
     : packet_type(type) {
@@ -16,7 +19,7 @@ Base::Base(const uint8_t type)
 Base::Base(const uint8_t type, const uint8_t ttl, const uint64_t timestamp, const uint8_t flags)
     : packet_type(type),
       packet_ttl(ttl),
-      packet_timestamp(timestamp),
+      packet_timestamp_ms(timestamp),
       packet_flags(flags) {
 }
 
@@ -24,8 +27,8 @@ Base::Base(const uint8_t type, BinaryReader &reader)
     : packet_type(type) {
     packet_ttl = reader.read_uint8();
     LOG_DEBUG("ttl: %d\n", packet_ttl);
-    packet_timestamp = reader.read_uint64();
-    LOG_DEBUG("timestamp: 0x%" PRIx64 "\n", packet_timestamp);
+    packet_timestamp_ms = reader.read_uint64();
+    LOG_DEBUG("timestamp: 0x%" PRIx64 "\n", packet_timestamp_ms);
     packet_flags = reader.read_uint8();
     LOG_DEBUG("flags: %d\n", packet_flags);
 }
@@ -39,11 +42,7 @@ uint8_t Base::getPacketTtl() const {
 }
 
 uint64_t Base::getPacketTimestamp() const {
-    return packet_timestamp;
-}
-
-uint64_t Base::getPacketTimestampMs() const {
-    return packet_timestamp / 1000;
+    return packet_timestamp_ms;
 }
 
 uint8_t Base::getPacketFlags() const {
@@ -55,7 +54,7 @@ void Base::setPacketTtl(const uint8_t ttl) {
 }
 
 void Base::setPacketTimestamp(const uint64_t timestamp) {
-    packet_timestamp = timestamp;
+    packet_timestamp_ms = timestamp;
 }
 
 void Base::setPacketFlags(const uint8_t flags) {

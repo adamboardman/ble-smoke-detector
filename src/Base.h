@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "include/ble_types.h"
 #include "BinaryReader.h"
 #include "BinaryWriter.h"
 #include "PacketTypes.h"
@@ -16,15 +17,13 @@ public:
 
     Base(uint8_t type, BinaryReader &reader);
 
-    virtual ~Base() = default;
+    virtual ~Base() {};
 
     [[nodiscard]] uint8_t getPacketType() const;
 
     [[nodiscard]] uint8_t getPacketTtl() const;
 
     [[nodiscard]] uint64_t getPacketTimestamp() const;
-
-    [[nodiscard]] uint64_t getPacketTimestampMs() const;
 
     [[nodiscard]] uint8_t getPacketFlags() const;
 
@@ -44,6 +43,6 @@ protected:
 private:
     uint8_t packet_type = 0;
     uint8_t packet_ttl = 0;
-    uint64_t packet_timestamp = 0;
+    uint64_t packet_timestamp_ms = 0;
     uint8_t packet_flags = 0;
 };

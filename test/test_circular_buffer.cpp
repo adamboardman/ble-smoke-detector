@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "pico_pi_mocks.h"
-#include "../CircularBuffer/CircularBuffer.h"
+#include "../src/CircularBuffer.h"
 
 #define BUFFER_LIMIT 200
 

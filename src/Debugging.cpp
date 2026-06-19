@@ -1,5 +1,7 @@
 #include "Debugging.h"
 
+#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
+
 #ifdef MOCK_PICO_PI
 #include "../test/pico_pi_mocks.h"
 #else
@@ -31,3 +33,5 @@ void printAvailableLogging() {
     }
     serialLogBuffer.clear_if_empty(); //try to keep logging within only one block
 }
+
+#endif

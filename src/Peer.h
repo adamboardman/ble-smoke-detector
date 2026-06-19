@@ -4,15 +4,19 @@
 #include <string>
 #include <vector>
 
+#include "include/ble_types.h"
+
 class Peer {
 public:
     Peer();
 
-    Peer(uint64_t id, const std::string &peer_name);
+    Peer(uint64_t id, std::string peer_name);
+
+    bool operator==(const Peer &other) const;
 
     void updateName(const std::string &peer_name);
 
-    uint64_t getId() const;
+    [[nodiscard]] uint64_t getId() const;
 
     std::string &getName();
 

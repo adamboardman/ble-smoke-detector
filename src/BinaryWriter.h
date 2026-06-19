@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include "include/ble_types.h"
 
 class BinaryWriter {
 public:

@@ -5,7 +5,7 @@
 #include "Debugging.h"
 #include "pico_pi_mocks.h"
 
-#include "../Packet/BinaryWriter.h"
+#include "../src/BinaryWriter.h"
 
 int lastAddress;
 int last_length_read;

@@ -20,22 +20,25 @@ set(CMAKE_CXX_STANDARD 23)
 
 add_definitions(-DPICO_ENTER_USB_BOOT_ON_EXIT)
 add_definitions(-DCYW43_PIO_CLOCK_DIV_DYNAMIC=1)
+add_definitions(-DPICO_CYW43_ARCH_DEFAULT_COUNTRY_CODE=CYW43_COUNTRY_UK)
 
 pico_sdk_init()
 
 add_executable(ble_smoke_detector main.cpp
-        BLE/BleConnection.cpp
-        BLE/BleConnectionTracker.cpp
-        CircularBuffer/Debugging.cpp
-        Packet/Peer.cpp
-        Packet/Base.cpp
-        Packet/PacketBase.cpp
-        Packet/Message.cpp
-        Packet/BinaryReader.cpp
-        Packet/BinaryWriter.cpp
+        src/BleConnection.cpp
+        src/BleConnectionTracker.cpp
+        src/Debugging.cpp
+        src/Peer.cpp
+        src/Base.cpp
+        src/PacketBase.cpp
+        src/Announce.cpp
+        src/Message.cpp
+        src/ProtocolProcessor.cpp
+        src/BinaryReader.cpp
+        src/BinaryWriter.cpp
 )
 
-include_directories(include CircularBuffer)
+include_directories(include src)
 
 pico_enable_stdio_usb(ble_smoke_detector 1) # Use this when debugging from a uf2 usb dropped build
 pico_enable_stdio_uart(ble_smoke_detector 1) # Use this when debugging through the debugger

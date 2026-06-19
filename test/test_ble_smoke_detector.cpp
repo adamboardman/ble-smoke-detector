@@ -6,9 +6,9 @@
 
 #include "Debugging.h"
 #include "pico_pi_mocks.h"
-#include "../Packet/BinaryReader.h"
-#include "../Packet/BinaryWriter.h"
-#include "../BLE/BleConnectionTracker.h"
+#include "../src/BinaryReader.h"
+#include "../src/BinaryWriter.h"
+#include "../src/BleConnectionTracker.h"
 
 const std::string data_booted = "014207000000000000096b000000aeedd867cf2c00000000000000096b0d0000096b2d0000aeedd867cf2c12536d6f6b654465746563746f723a65646165000d5b303030325d20426f6f746564";
 const std::string data_still_alive = "014207000000000000316100000082f2d867cf2c0000000000000031610d000031612d000082f2d867cf2c0d52657065617465723a6632383200125b303030635d205374696c6c20616c697665";

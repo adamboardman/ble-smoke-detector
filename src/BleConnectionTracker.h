@@ -3,12 +3,17 @@
 #include <map>
 #include <set>
 
+#include "include/ble_types.h"
 #include "BleConnection.h"
-#include "../Packet/Message.h"
-#include "../Packet/Peer.h"
+#include "Message.h"
+#include "Peer.h"
+#include "Announce.h"
 
-inline auto build_time_ms = 1755685519; //Occasionally update this, us since 1970
+inline uint64_t build_time_ms = 1781273465ll*1000; //Occasionally update this, ms since 1970
+inline auto one_second_in_us = 1000 * 1000 * 1;
 inline auto two_seconds_in_us = 1000 * 1000 * 2;
+inline auto three_seconds_in_us = 1000 * 1000 * 3;
+inline auto five_seconds_in_us = 1000 * 1000 * 5;
 inline auto twenty_seconds_in_us = 1000 * 1000 * 20;
 inline auto thirty_seconds_in_us = 1000 * 1000 * 30;
 inline auto two_minutes_in_us = 1000 * 1000 * 60 * 5;
@@ -20,7 +25,9 @@ class BleConnectionTracker {
 public:
     BleConnection &connectionForConnHandle(hci_con_handle_t connection_handle);
 
-    Message *storeMessageAndReturnIfNew(Message &message);
+    Message *storeMessageAndReturnIfNew(const Message &message);
+
+    Announce *storeAnnounceAndReturnIfNew(Announce &ann);
 
     Message *messageWithId(const std::string &id);
 
@@ -34,18 +41,31 @@ public:
 
     void enqueueBroadcastPacket(Base *packet, BleConnection *from_connection, Peer *from_peer);
 
+    void updateRssiForActiveConnections(const uint8_t *bt_address, int8_t rssi);
+
+    void addAvailablePeer(const uint8_t *bt_address, uint8_t bt_address_type,
+                          service_uuid_check_status services, int8_t rssi, bool use_coded);
+
     void addAvailablePeer(const bd_addr_t &bt_address, bd_addr_type_t bt_address_type,
-                          service_uuid_check_status services, int8_t rssi);
+                          service_uuid_check_status services, int8_t rssi, bool use_coded);
 
-    void reportConnection(uint16_t handle, const bd_addr_t &addr, bd_addr_type_t address_type);
+    BleConnection &reportConnection(uint16_t handle, const bd_addr_t &addr, bd_addr_type_t address_type);
 
-    void reportConnection(uint16_t handle, const bd_addr_t &addr, bd_addr_type_t address_type, uint8_t role);
+    BleConnection &reportConnection(uint16_t handle, const bd_addr_t &addr, bd_addr_type_t address_type, uint8_t role);
+
+    void reportConnectionFailure(const bd_addr_t &addr, int reason);
 
     void reportDisconnection(uint16_t handle);
+
+    [[nodiscard]] bool weHaveTheTime() const;
 
     std::vector<BleConnection *> getConnectableNeighbours();
 
     bool requestNextRssi(bool restart);
+
+    void printTime();
+
+    int getActiveConnectionCount(bool log=false);
 
     void printStats();
 
@@ -53,13 +73,15 @@ public:
 
     bool havePacketsToSend();
 
-    void sendPackets();
+    bool sendPackets();
 
     void possiblyUpdateTimeOffset(uint64_t timestamp_ms);
 
     [[nodiscard]] uint64_t getTimeMs() const;
 
     void setConnectionStarted(const BleConnection *neighbour);
+
+    Announce *getAnyAnnounce();
 
     void cleanupStaleItems();
 
@@ -82,6 +104,8 @@ private:
     std::map<uint64_t, Peer> peers{};
     //Store of message data
     std::map<std::string, Message> messages{};
+    //Store of announcements
+    std::map<std::size_t, Announce> announces{};
     //Store of active and disconnected connections
     std::map<hci_con_handle_t, BleConnection> connections{};
     //Store of potential connections

@@ -9,17 +9,17 @@ set(CMAKE_CXX_STANDARD 23)
 
 find_package(Catch2 REQUIRED)
 
-include_directories(../include ../CircularBuffer)
+include_directories(.. ../include ../src)
 
 add_executable(tests
-        ../BLE/BleConnection.cpp
-        ../BLE/BleConnectionTracker.cpp
-        ../Packet/Base.cpp
-        ../Packet/PacketBase.cpp
-        ../Packet/Peer.cpp
-        ../Packet/BinaryReader.cpp
-        ../Packet/BinaryWriter.cpp
-        ../Packet/Message.cpp
+        ../src/BleConnection.cpp
+        ../src/BleConnectionTracker.cpp
+        ../src/Base.cpp
+        ../src/PacketBase.cpp
+        ../src/Peer.cpp
+        ../src/BinaryReader.cpp
+        ../src/BinaryWriter.cpp
+        ../src/Message.cpp
         pico_pi_mocks.cpp
         test_ble_smoke_detector.cpp
         test_circular_buffer.cpp

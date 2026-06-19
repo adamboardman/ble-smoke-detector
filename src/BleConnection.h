@@ -4,11 +4,12 @@
 #include <functional>
 #include <map>
 #include <string>
+#include "include/ble_types.h"
 
-#ifdef PICO_BOARD
 #ifdef MOCK_PICO_PI
 #include "../test/packet_repeater_mocks.h"
 #else
+#ifdef PICO_BOARD
 #include "bluetooth.h"
 #include "ble/gatt_client.h"
 #endif
@@ -40,6 +41,8 @@ class BleConnection {
 public:
     void setConnectionHandle(uint16_t hci_con_handle);
 
+    bool operator==(const BleConnection &other) const;
+
     void setNotificationEnabled(bool cond);
 
     [[nodiscard]] bool getNotificationEnabled() const;
@@ -47,6 +50,10 @@ public:
     void setPacketCharacteristicValueHandle(int handle);
 
     void setConnected(bool cond);
+
+    void setConnectFailure(int reason);
+
+    void setBleAddress(const uint8_t *addr, const uint8_t addr_type);
 
     void setBleAddress(const bd_addr_t &addr, bd_addr_type_t addr_type);
 
@@ -72,6 +79,8 @@ public:
 
     void setMtu(uint16_t mtu);
 
+    void setUseCodedPhy(bool use);
+
     bool canAndNeedToDiscoverPacketCharacteristicsQuery(gatt_client_service_t &service) const;
 
     void storeHandlesIfServiceMatches(const gatt_client_service_t &service);
@@ -92,6 +101,10 @@ public:
 
     [[nodiscard]] uint8_t getRole() const;
 
+    [[nodiscard]] int getFailReason() const;
+
+    bool getUseCodedPhy();
+
     gatt_client_notification_t *getNotificationListener();
 
 private:
@@ -105,6 +118,8 @@ private:
     int notification_enabled = 0;
     bool has_data_to_send = false;
     bool connected = false;
+    bool use_coded_phy = false;
+    int fail_reason = 0;
     service_uuid_check_status services_found = ServiceUUIDFound;
     int8_t rssi = 0;
     uint8_t role = HCI_ROLE_INVALID;

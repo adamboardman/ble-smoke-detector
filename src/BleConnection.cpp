@@ -1,19 +1,24 @@
-#include "Debugging.h"
 #include "BleConnection.h"
 
 #include <cstring>
 
-#ifdef PICO_BOARD
 #ifdef MOCK_PICO_PI
+#include "Debugging.h"
 #include "../test/packet_repeater_mocks.h"
 #include "../test/pico_pi_mocks.h"
 #else
+#ifdef PICO_BOARD
+#include "Debugging.h"
 #include "hardware/timer.h"
 #endif
 #endif
 
 void BleConnection::setConnectionHandle(const uint16_t hci_con_handle) {
     connection_handle = hci_con_handle;
+}
+
+bool BleConnection::operator==(const BleConnection &other) const {
+    return connection_handle == other.getConnectionHandle();
 }
 
 void BleConnection::setNotificationEnabled(const bool cond) {
@@ -30,6 +35,19 @@ void BleConnection::setPacketCharacteristicValueHandle(const int handle) {
 
 void BleConnection::setConnected(const bool cond) {
     connected = cond;
+}
+
+void BleConnection::setConnectFailure(const int reason) {
+    fail_reason = reason;
+}
+
+int BleConnection::getFailReason() const {
+    return fail_reason;
+}
+
+void BleConnection::setBleAddress(const uint8_t *addr, const uint8_t addr_type) {
+    memcpy(bt_address, addr, BD_ADDR_LEN);
+    bt_address_type = static_cast<bd_addr_type_t>(addr_type);
 }
 
 void BleConnection::setBleAddress(const bd_addr_t &addr, const bd_addr_type_t addr_type) {
@@ -79,6 +97,14 @@ bool BleConnection::isConnected() const {
 
 void BleConnection::setMtu(uint16_t mtu) {
     bt_mtu = mtu;
+}
+
+void BleConnection::setUseCodedPhy(bool use) {
+    use_coded_phy = use;
+}
+
+bool BleConnection::getUseCodedPhy() {
+    return use_coded_phy;
 }
 
 void BleConnection::storeHandlesIfServiceMatches(const gatt_client_service_t &service) {

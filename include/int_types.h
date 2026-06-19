@@ -2,12 +2,14 @@
 
 // inttypes.h appears to be unavailable so we define some useful things ourselves
 
-#ifndef PRIx64
+#if !defined(PRIu64) or !defined(PRIx64)
 # if __WORDSIZE == 64
 #  define __PRI64_PREFIX	"l"
 # else
 #  define __PRI64_PREFIX	"ll" // NOLINT(*-reserved-identifier)
 # endif
+
+# define PRIu64		__PRI64_PREFIX "u"
 # define PRIx64		__PRI64_PREFIX "x"
 #endif
 

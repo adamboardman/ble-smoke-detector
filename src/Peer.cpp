@@ -1,8 +1,14 @@
 #include "Peer.h"
 
+#include <utility>
+
 Peer::Peer() = default;
 
-Peer::Peer(const uint64_t id, const std::string &peer_name) : id(id), name(peer_name) {
+Peer::Peer(const uint64_t id, std::string peer_name) : id(id), name(std::move(peer_name)) {
+}
+
+bool Peer::operator==(const Peer &other) const {
+    return id == other.getId();
 }
 
 void Peer::updateName(const std::string &peer_name) {

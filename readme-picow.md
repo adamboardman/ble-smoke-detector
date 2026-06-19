@@ -1,11 +1,11 @@
-BLE Smoke Detector
-==================
+BLE Smoke Detector - PicoW
+==========================
 
 The smoke detector will use these UUID's:
 
 ```
 PRIMARY_SERVICE, 298cfeca-a10d-49ee-8a74-e513547f7ef7
-CHARACTERISTIC, a8d99167-e58c-4a0c-9565-e2f1a7fbc05d, READ | WRITE | DYNAMIC,
+CHARACTERISTIC, a8d99167-e58c-4a0c-9565-e2f1a7fbc05d, READ | WRITE | DYNAMIC
 ```
 
 The idea is that you set these where you wish to detect smoke.
@@ -13,6 +13,11 @@ The idea is that you set these where you wish to detect smoke.
 They should be generally off, only booting when the smoke detector detects smoke.
 It then single shot fires off a notification to any BLE devices it can scan for,
 signals done and expects to be powered off.
+
+This readme is for the PicoW and PicoW2 devices using the Pico C++ SDK version.
+See also readme-xiao-esp32c3.md for details about using that device with the Arduino SDK.
+
+Note: This variant uses btstack, cmake and compiles main.cpp.
 
 Building
 ========

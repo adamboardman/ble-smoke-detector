@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <vector>
 
-#include "Debugging.h"
+#include "src/Debugging.h"
 #include "include/int_types.h"
 #include "btstack.h"
 #include "hci_dump_embedded_stdout.h"
@@ -17,12 +17,14 @@
 #include "hci.h"
 #include "gap.h"
 #include "pico/unique_id.h"
-#include "BLE/BleConnection.h"
+#include "src/BinaryReader.h"
+#include "src/ProtocolProcessor.h"
+#include "src/BleConnection.h"
 #include "hardware/sync.h"
 #include <cinttypes>
 
-#include "Packet/BinaryWriter.h"
-#include "BLE/BleConnectionTracker.h"
+#include "src/BinaryWriter.h"
+#include "src/BleConnectionTracker.h"
 #include "hardware/clocks.h"
 #include "hardware/pll.h"
 #include "pico/binary_info/code.h"
@@ -79,6 +81,7 @@ bool discover_characteristics_for_service = false;
 
 BleConnectionTracker connection_tracker;
 BleConnectionTracker *connection_tracker_ptr = &connection_tracker;
+ProtocolProcessor processor(connection_tracker);
 
 static btstack_timer_source_t stop_scan_timer_source;
 static btstack_packet_callback_registration_t hci_event_callback_registration;
@@ -98,10 +101,6 @@ uint16_t att_read_callback(hci_con_handle_t connection_handle, uint16_t att_hand
             break;
         case ATT_CHARACTERISTIC_a8d99167_e58c_4a0c_9565_e2f1a7fbc05d_01_VALUE_HANDLE:
             LOG_DEBUG("read - from a packet client - we have nothing to say just now\n");
-            memset(&buffer[offset], 0, buffer_size - offset);
-            break;
-        case ATT_CHARACTERISTIC_a8d99167_e58c_4a0c_9565_e2f1a7fbc05d_01_USER_DESCRIPTION_HANDLE:
-            LOG_DEBUG("read - from a packet client - characteristic description - unknown if this is needed\n");
             memset(&buffer[offset], 0, buffer_size - offset);
             break;
         default:
@@ -393,6 +392,40 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
     }
 }
 
+void handle_gatt_client_value_update_event(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
+    global_activity++;
+    LOG_DEBUG("handle_gatt_client_value_update_event(%d,%d,packet,%d)\n", packet_type, channel, size);
+    //print_named_data("client_value_update_event packet", packet, size);
+
+    const auto client_value_update_event_type = hci_event_packet_get_type(packet);
+    LOG_DEBUG("client_value_update_event_type 0x%x\n", client_value_update_event_type);
+    switch (client_value_update_event_type) {
+        case GATT_EVENT_NOTIFICATION: {
+            //0xa7
+            auto handle = gatt_event_notification_get_handle(packet);
+            auto service_id = gatt_event_notification_get_service_id(packet);
+            auto connection_id = gatt_event_notification_get_connection_id(packet);
+            auto value_handle = gatt_event_notification_get_value_handle(packet);
+            auto value_length = gatt_event_notification_get_value_length(packet);
+            auto value = gatt_event_notification_get_value(packet);
+            auto connection = connection_tracker.connectionForConnHandle(handle);
+            LOG_DEBUG("handle 0x%x, %d, %d, %d, %d\n", handle, service_id, connection_id, value_handle, value_length);
+            processor.processWrite(connection, 0, value, value_length);
+            break;
+        }
+        case GATT_EVENT_INDICATION: {
+            auto handle = gatt_event_indication_get_handle(packet);
+            auto service_id = gatt_event_indication_get_service_id(packet);
+            auto connection_id = gatt_event_indication_get_connection_id(packet);
+            auto value_handle = gatt_event_indication_get_value_handle(packet);
+            auto value_length = gatt_event_indication_get_value_length(packet);
+            auto value = gatt_event_indication_get_value(packet);
+            LOG_DEBUG("handle 0x%x, %d, %d, %d, %d\n", handle, service_id, connection_id, value_handle, value_length);
+            print_named_data("client_value_update_event indication", value, value_length);
+        }
+    }
+}
+
 
 void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
     UNUSED(size);
@@ -424,6 +457,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
             LOG_DEBUG("Disconnected with handle 0x%x\n", handle);
             connection_tracker.reportDisconnection(handle);
+            global_activity++;
 
             const auto reason = hci_event_disconnection_complete_get_reason(packet);
             LOG_DEBUG("LE Connection disconnect, reason 0x%02x ", reason);
@@ -491,6 +525,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
                               address_type == 0 ? "public" : "random",
                               bd_addr_to_str(address), role);
                     connection_tracker.reportConnection(handle, address, address_type, role);
+                    global_activity++;
                     break;
                 }
                 default:
@@ -512,7 +547,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             //dump_advertisement_data(data, length);
             const auto services = check_for_uuid(data, length);
             if (services & ServiceUUIDFound) {
-                connection_tracker.addAvailablePeer(address, address_type, services, rssi);
+                connection_tracker.addAvailablePeer(address, address_type, services, rssi, false);
             }
             LOG_DEBUG("GAP_EVENT_ADVERTISING_REPORT type:%d rssi: %d with %s address %s services: 0b%b\n",
                       adv_event_type,
@@ -543,6 +578,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             const auto err = gatt_client_discover_primary_services_by_uuid128(
                 &handle_gatt_client_event, con_handle, packet_service_uuid);
             LOG_DEBUG("Connection complete - discover primary services - err: %d\n", err);
+            global_activity++;
             break;
         }
         case GATT_EVENT_CAN_WRITE_WITHOUT_RESPONSE: {
@@ -618,6 +654,7 @@ void att_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
                       address_type == 0 ? "public" : "random",
                       bd_addr_to_str(address));
             connection_tracker.reportConnection(handle, address, address_type);
+            global_activity++;
             break;
         }
         case ATT_EVENT_DISCONNECTED: {
@@ -627,6 +664,7 @@ void att_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
             LOG_DEBUG("Disconnected with handle 0x%x\n", handle);
             connection_tracker.reportDisconnection(handle);
+            global_activity++;
             break;
         }
         default:
@@ -685,7 +723,7 @@ void gpio_callback(const uint gpio, const uint32_t events) {
     if (gpio == EXIT_GPIO_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
         keep_running = false;
     }
-    if (gpio == SMOKE_SEEN_PIN && (events & GPIO_IRQ_EDGE_RISE)) {
+    if (gpio == SMOKE_SEEN_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
         smoke_seen = true;
     }
     if (gpio == LIFE_CHECK_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
@@ -775,14 +813,14 @@ void setup_gpio_callback() {
 
     gpio_init(SMOKE_SEEN_PIN);
     gpio_set_dir(SMOKE_SEEN_PIN, GPIO_IN);
-    gpio_pull_down(SMOKE_SEEN_PIN);
+    gpio_pull_up(SMOKE_SEEN_PIN);
 
     gpio_init(LIFE_CHECK_PIN);
     gpio_set_dir(LIFE_CHECK_PIN, GPIO_IN);
     gpio_pull_up(LIFE_CHECK_PIN);
 
     gpio_set_irq_enabled_with_callback(EXIT_GPIO_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
-    gpio_set_irq_enabled_with_callback(SMOKE_SEEN_PIN, GPIO_IRQ_EDGE_RISE, true, &gpio_callback);
+    gpio_set_irq_enabled_with_callback(SMOKE_SEEN_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
     gpio_set_irq_enabled_with_callback(LIFE_CHECK_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
 }
 
@@ -803,9 +841,9 @@ int main() {
 
 #if (PICO_RP2040)
 #ifdef DEBUG_BUILD
-    reduce_clock(44);// 44 slower than this and things get funky with the debug logging
+    reduce_clock(44); // 44 slower than this and things get funky with the debug logging
 #else
-    reduce_clock(18);// 18 this is possible if you turn off the logging - serial printf mutex hell
+    reduce_clock(18); // 18 this is possible if you turn off the logging - serial printf mutex hell
 #endif
 #endif
     stdio_init_all();
@@ -860,17 +898,17 @@ int main() {
         }
     }
 
-    auto lastSleepOrActivity = time_us_32();
-    uint32_t lastFlash = 0;
-    auto boot_time = time_us_32();
-    auto last_try_to_off = time_us_32();
-    auto lastScan = time_us_32();
-    auto lastRssiUpdate = time_us_32();
+    uint64_t lastSleepOrActivity = time_us_64();
+    uint64_t lastFlash = 0;
+    uint64_t boot_time = time_us_64();
+    uint64_t last_try_to_off = time_us_64();
+    uint64_t lastScan = time_us_64();
+    uint64_t lastRssiUpdate = time_us_64();
     bool rssi_update_in_progress = false;
-    auto lastCleanup = time_us_32() + five_minutes_in_us; //gives 15mins before first cleanup
+    uint64_t lastCleanup = time_us_64() + five_minutes_in_us; //gives 15mins before first cleanup
     auto last_activity = global_activity;
     while (keep_running) {
-        const auto loopStart = time_us_32();
+        const auto loopStart = time_us_64();
         printAvailableLogging();
         generateMessageIfNeeded();
         if (!scanning && !connection_in_progress && !discover_primary_services && !discover_characteristics_for_service
@@ -878,7 +916,7 @@ int main() {
             if (const auto connecting = connect_to_first_neighbour(); !connecting) {
                 // if (const auto duplicate = connection_tracker.getAnyDuplicateHandle()) {
                 //     if (gap_disconnect(duplicate) == ERROR_CODE_SUCCESS) {
-                //         disconnection_started_at = time_us_32();
+                //         disconnection_started_at = time_us_64();
                 //     }
                 // }
             }
@@ -892,9 +930,9 @@ int main() {
 
         if ((loopStart - lastFlash) > two_seconds_in_us) {
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
-            sleep_ms(20);
+            sleep_ms(10);
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
-            lastFlash = time_us_32();
+            lastFlash = time_us_64();
         }
         if ((loopStart - last_try_to_off) > twenty_seconds_in_us) {
 			//auto-turn off if we have nothing to broadcast
@@ -904,26 +942,26 @@ int main() {
                     gpio_set_pulls(KEEP_ALIVE_PIN, false, false);
                 }
             } else {
-                last_try_to_off = time_us_32();
+                last_try_to_off = time_us_64();
             }
 		}
         if ((loopStart - lastRssiUpdate) > five_minutes_in_us) {
             rssi_update_in_progress = connection_tracker.requestNextRssi(true);
-            lastRssiUpdate = time_us_32();
+            lastRssiUpdate = time_us_64();
         } else if (rssi_update_in_progress) {
             rssi_update_in_progress = connection_tracker.requestNextRssi(false);
         }
         if ((loopStart - lastScan) > thirty_seconds_in_us) {
             start_scanning_for_local_nodes();
-            lastScan = time_us_32();
+            lastScan = time_us_64();
         }
         if ((loopStart - lastCleanup) > ten_minutes_in_us) {
             connection_tracker.cleanupStaleItems();
-            lastCleanup = time_us_32();
+            lastCleanup = time_us_64();
         }
 
         if (last_activity != global_activity) {
-            lastSleepOrActivity = time_us_32();
+            lastSleepOrActivity = time_us_64();
             last_activity = global_activity;
         }
         best_effort_wfe_or_timeout(make_timeout_time_ms(100));
