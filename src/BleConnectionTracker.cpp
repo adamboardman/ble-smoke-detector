@@ -6,7 +6,7 @@
 
 #include "BleConnectionTracker.h"
 
-#include "include/int_types.h"
+#include "int_types.h"
 #include "Announce.h"
 #include "BinaryWriter.h"
 
@@ -21,7 +21,7 @@
 #include "hardware/timer.h"
 #include "ble/att_server.h"
 #else
-#include "include/ble_types.h"
+#include "ble_types.h"
 #endif
 #endif
 
@@ -60,6 +60,7 @@ BleConnection &BleConnectionTracker::connectionForConnHandle(const hci_con_handl
 }
 
 Message *BleConnectionTracker::storeMessageAndReturnIfNew(const Message &message) {
+    if (message.isMalformed()) return nullptr;
     const auto &id = message.getMessageId();
     if (const auto search = messages.find(id); search != messages.end()) {
         return nullptr; //message was found so it not new
@@ -69,6 +70,7 @@ Message *BleConnectionTracker::storeMessageAndReturnIfNew(const Message &message
 }
 
 Announce *BleConnectionTracker::storeAnnounceAndReturnIfNew(Announce &ann) {
+    if (ann.isMalformed()) return nullptr;
     const auto id = ann.getPacketHash();
     if (const auto search = announces.find(id); search != announces.end()) {
         return nullptr; //announce was found so it not new
@@ -340,7 +342,7 @@ bool BleConnectionTracker::SendPacketToConnection(Base &packet, BleConnection &b
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
     hci_connection_t *hci_connection = hci_connection_for_handle(con_handle);
 
-    LOG_DEBUG("SendPacketToConnection - type(%d), peer(%s:0x%" PRIx64 "), hci_connection_for_handle(0x%x), hc(0x%zx)\n",
+    LOG_DEBUG("SendPacketToConnection - type(%d), peer(%s:0x%" PRIx64 "), hci_connection_for_handle(0x%x), hc(0x%p)\n",
               packet.getPacketType(), peer_string.c_str(), sender_id,
               con_handle, hci_connection);
     uint8_t status = 0;

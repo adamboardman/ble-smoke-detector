@@ -4,23 +4,16 @@
 extern void print_named_data(const char *name, const uint8_t *data, uint16_t data_size);
 #endif
 
-Message::Message() : PacketBase(type_message), sender_peer(nullptr) {
-}
-
-Message::Message(const uint8_t ttl, const uint64_t timestamp, const uint8_t packet_flags, const uint64_t sender)
-    : PacketBase(type_message, ttl, timestamp, packet_flags, sender), sender_peer(nullptr) {
+Message::Message() : Base(type_message) {
 }
 
 Message::Message(const uint8_t ttl, const uint64_t timestamp, const uint8_t packet_flags, const uint64_t sender,
                  const uint64_t recipient)
-    : PacketBase(type_message, ttl, timestamp, packet_flags, sender, recipient),
-      sender_peer(nullptr) {
+    : Base(type_message, ttl, timestamp, packet_flags, sender, recipient) {
 }
 
 Message::Message(const uint8_t type, const uint8_t version, BinaryReader &reader)
-    : PacketBase(type, version, reader),
-      sender_peer(nullptr) {
-
+    : Base(type, version, reader) {
     message_flags = reader.read_uint8();
     message_timestamp_ms = reader.read_uint64();
 
@@ -40,7 +33,7 @@ Message::Message(const uint8_t type, const uint8_t version, BinaryReader &reader
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
         print_named_data("sender_nick", sender_nick_data, sender_nickname_len);
 #else
-        LOG_DEBUG("Nick: %s\n",sender_nickname.c_str());
+        LOG_DEBUG("Nick: %s\n", sender_nickname.c_str());
 #endif
     } else {
         sender_nickname = "";
@@ -52,7 +45,7 @@ Message::Message(const uint8_t type, const uint8_t version, BinaryReader &reader
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
         print_named_data("content", content_data, content_len);
 #else
-        LOG_DEBUG("Content: %s\n",content.c_str());
+        LOG_DEBUG("Content: %s\n", content.c_str());
 #endif
     } else {
         content = "";
@@ -81,13 +74,15 @@ Message::Message(const uint8_t type, const uint8_t version, BinaryReader &reader
             channel = "";
         }
     }
+
+    handleReaderRemainder(reader);
 }
 
 void Message::setMessageFlags(const uint8_t flags) {
     message_flags = flags;
 }
 
-void Message::setMessageTimestamp(uint64_t value) {
+void Message::setMessageTimestamp(const uint64_t value) {
     message_timestamp_ms = value;
 }
 
@@ -101,6 +96,7 @@ void Message::setSenderNickname(const std::string &string) {
 
 void Message::setContent(const std::string &string) {
     content = string;
+    setPayloadLength(0); //ensure re-calculation
 }
 
 void Message::setEncryptedContent(const std::string &string) {
@@ -142,25 +138,30 @@ const std::string &Message::getRecipientNickname() const {
     return recipient_nickname;
 }
 
-void Message::setSenderPeer(Peer *peer) {
-    sender_peer = peer;
-}
-
-Peer *Message::getSenderPeer() const {
-    return sender_peer;
-}
-
 const std::string &Message::getChannel() const {
     return channel;
 }
 
-void Message::writePacket(std::vector<uint8_t> &vector) {
-    PacketBase::writePacket(vector);
+uint32_t Message::getPayloadLength() {
+    if (Base::getPayloadLength() > 0) return Base::getPayloadLength();
+    uint32_t len = 0;
+    len += 1; //message_flags
+    len += sizeof(uint64_t); //message_timestamp_ms
+    len += 1 + static_cast<uint8_t>(std::min(static_cast<size_t>(255), message_id.size()));
+    len += 1 + static_cast<uint8_t>(std::min(static_cast<size_t>(255), sender_nickname.size()));
+    len += 1 + static_cast<uint16_t>(std::min(static_cast<size_t>(65535), content.size()));
+    if (hasSenderPeerID()) {
+        len += 1; //size
+        len += sizeof(uint64_t); //peerId
+    }
+    if (hasChannel()) {
+        len += 1 + static_cast<uint8_t>(std::min(static_cast<size_t>(255), channel.size()));
+    }
+    setPayloadLength(len);
+    return len;
 }
 
 void Message::writePacketPayload(BinaryWriter &writer) {
-    PacketBase::writePacketPayload(writer);
-
     writer.write_uint8(message_flags);
     writer.write_uint64(message_timestamp_ms);
 

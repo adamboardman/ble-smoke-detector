@@ -30,7 +30,6 @@ add_executable(ble_smoke_detector main.cpp
         src/Debugging.cpp
         src/Peer.cpp
         src/Base.cpp
-        src/PacketBase.cpp
         src/Announce.cpp
         src/Message.cpp
         src/ProtocolProcessor.cpp

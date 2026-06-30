@@ -4,6 +4,7 @@
 
 uint8_t BinaryReader::read_uint8() {
     if (pos + 1 > buffer_size) {
+        pos += 1;
         return 0;
     }
     uint8_t ret = buffer[pos];
@@ -13,6 +14,7 @@ uint8_t BinaryReader::read_uint8() {
 
 uint16_t BinaryReader::read_uint16() {
     if (pos + 2 > buffer_size) {
+        pos += 2;
         return 0;
     }
     const uint16_t ret = static_cast<uint16_t>(buffer[pos]) << 8 | buffer[pos + 1];
@@ -22,6 +24,7 @@ uint16_t BinaryReader::read_uint16() {
 
 uint32_t BinaryReader::read_uint32() {
     if (pos + 4 > buffer_size) {
+        pos += 4;
         return 0;
     }
     const uint32_t ret = static_cast<uint64_t>(buffer[pos]) << 24 |
@@ -34,6 +37,7 @@ uint32_t BinaryReader::read_uint32() {
 
 uint64_t BinaryReader::read_uint64() {
     if (pos + 8 > buffer_size) {
+        pos += 8;
         return 0;
     }
     const uint64_t ret = static_cast<uint64_t>(buffer[pos]) << 56 |
@@ -54,6 +58,7 @@ uint16_t BinaryReader::read_remainder_len() {
 
 const uint8_t *BinaryReader::read_data(const uint16_t len) {
     if (pos + len > buffer_size) {
+        pos += len;
         return nullptr;
     }
     const uint8_t *ret = &buffer[pos];

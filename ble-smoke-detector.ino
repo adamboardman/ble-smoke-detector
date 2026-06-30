@@ -71,7 +71,7 @@ void generateMessageIfNeeded() {
     }
     const std::string messageContentString(reinterpret_cast<const char *>(outBuffer.data()), outBuffer.size());
 
-    Message message(7, timestamp_ms, 0, sender);
+    Message message(7, timestamp_ms, 0, sender, 0);
     message.setContent(messageContentString);
     outBuffer.clear();
     message.setMessageFlags(0);

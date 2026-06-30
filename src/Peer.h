@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "include/ble_types.h"
+#include "ble_types.h"
 
 class Peer {
 public:

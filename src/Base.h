@@ -4,20 +4,28 @@
 #include <string>
 #include <vector>
 
-#include "include/ble_types.h"
+#include "ble_types.h"
 #include "BinaryReader.h"
 #include "BinaryWriter.h"
 #include "PacketTypes.h"
+#include "Peer.h"
 
 class Base {
 public:
-    explicit Base(uint8_t type);
+    Base(uint8_t type);
 
     Base(uint8_t type, uint8_t ttl, uint64_t timestamp, uint8_t flags);
 
-    Base(uint8_t type, BinaryReader &reader);
+    Base(uint8_t type, uint8_t ttl, uint64_t timestamp, uint8_t packet_flags, uint64_t sender,
+         uint64_t recipient);
 
-    virtual ~Base() {};
+    Base(uint8_t type, uint8_t version, BinaryReader &reader);
+
+    virtual ~Base() {}
+
+    void handleReaderRemainder(BinaryReader &reader);
+
+    [[nodiscard]] uint8_t getPacketVersion() const;
 
     [[nodiscard]] uint8_t getPacketType() const;
 
@@ -33,16 +41,60 @@ public:
 
     void setPacketFlags(uint8_t flags);
 
-    virtual void writePacketPayload(BinaryWriter &writer);
+    [[nodiscard]] bool hasPacketRecipient() const {
+        return (getPacketFlags() & packet_flag_has_recipient) != 0;
+    }
 
-    virtual void writePacket(std::vector<uint8_t> &vector);
+    [[nodiscard]] bool hasSignature() const {
+        return (getPacketFlags() & packet_flag_has_signature) != 0;
+    }
+
+    [[nodiscard]] bool hasPacketRoute() const {
+        return (getPacketFlags() & packet_flag_has_route) != 0;
+    }
+
+    [[nodiscard]] uint64_t getPacketSenderId() const;
+
+    void setPacketSenderId(uint64_t senderId);
+
+    [[nodiscard]] uint64_t getPacketRecipientId() const;
+
+    [[nodiscard]] Peer *getSenderPeer() const;
+
+    void setPayloadLength(uint32_t len);
+
+    [[nodiscard]] virtual uint32_t getPayloadLength();
+
+    void setSenderPeer(Peer *peer);
+
+    [[nodiscard]] virtual std::size_t getPacketHash() const;
+
+    void writePacket(std::vector<uint8_t> &vector);
+
+    void setMalformed(bool cond);
+
+    [[nodiscard]] bool isMalformed() const;
+
+    static void writeVariable(const BinaryWriter &writer, uint8_t type, const std::string &value);
+
+    static uint32_t variableLength(uint8_t type, size_t size);
+
+    virtual void writePacketPayload(BinaryWriter &writer);
 
 protected:
     void setPacketType(PacketType type);
 
 private:
+    bool malformed = false;
+    uint8_t packet_version = 1;
     uint8_t packet_type = 0;
     uint8_t packet_ttl = 0;
     uint64_t packet_timestamp_ms = 0;
     uint8_t packet_flags = 0;
+    uint32_t payload_length = 0;
+    uint64_t packet_sender_id = 0;
+    uint64_t packet_recipient_id = 0;
+    Peer *sender_peer = nullptr;
+    std::vector<uint64_t> routeList{};
+    std::string signature{};
 };

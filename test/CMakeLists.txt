@@ -15,11 +15,11 @@ add_executable(tests
         ../src/BleConnection.cpp
         ../src/BleConnectionTracker.cpp
         ../src/Base.cpp
-        ../src/PacketBase.cpp
         ../src/Peer.cpp
         ../src/BinaryReader.cpp
         ../src/BinaryWriter.cpp
         ../src/Message.cpp
+        ../src/Announce.cpp
         pico_pi_mocks.cpp
         test_ble_smoke_detector.cpp
         test_circular_buffer.cpp

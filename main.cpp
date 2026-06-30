@@ -50,7 +50,6 @@ const uint LIFE_CHECK_PIN = 18;
 #define BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED 0x01 /**< Connectable and scannable undirected advertising events. */
 
 
-
 void print_named_data(const char *name, const uint8_t *data, const uint16_t data_size) {
     LOG_DEBUG("%s:", name);
     for (int i = 0; i < data_size; i++) {
@@ -375,8 +374,7 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
             hci_connection_t *hci_connection = hci_connection_for_handle(con_handle);
             LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", con_handle, hci_connection);
             LOG_DEBUG("GATT_EVENT_QUERY_COMPLETE handle: 0x%x, service: %d, conn: %d, status: %d\n", con_handle,
-                      service_id,
-                      connection_id, status);
+                      service_id, connection_id, status);
             discover_primary_services = false;
             discover_characteristics_for_service = false;
             if (connection.canAndNeedToDiscoverPacketCharacteristicsQuery(service)) {

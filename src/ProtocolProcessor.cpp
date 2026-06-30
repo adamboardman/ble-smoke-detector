@@ -1,7 +1,8 @@
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
 #include "Debugging.h"
 #endif
-#include "include/int_types.h"
+
+#include "int_types.h"
 
 #include "ProtocolProcessor.h"
 

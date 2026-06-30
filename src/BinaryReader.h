@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include "include/ble_types.h"
+#include "ble_types.h"
 
 class BinaryReader {
 public:

@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <string>
 
-#include "include/ble_types.h"
-#include "PacketBase.h"
+#include "ble_types.h"
+#include "Base.h"
 #include "Peer.h"
 
 enum MessageFlag {
@@ -15,14 +15,12 @@ enum MessageFlag {
     message_flag_has_sender_peer_id = 0x10,
     message_flag_has_mentions = 0x20, //We ignore this - unsupported
     message_flag_has_channel = 0x40,
-    message_flag_is_encrypted = 0x80
+    message_flag_is_encrypted = 0x80  //We ignore this - unsupported
 };
 
-class Message final : public PacketBase {
+class Message final : public Base {
 public:
     Message();
-
-    Message(uint8_t ttl, uint64_t timestamp, uint8_t packet_flags, uint64_t sender);
 
     Message(uint8_t ttl, uint64_t timestamp, uint8_t packet_flags, uint64_t sender, uint64_t recipient);
 
@@ -78,8 +76,6 @@ public:
 
     void setRecipientNickname(const std::string &string);
 
-    void setSenderPeer(Peer *peer);
-
     [[nodiscard]] uint8_t getMessageFlags() const;
 
     [[nodiscard]] uint64_t getMessageTimestamp() const;
@@ -92,11 +88,9 @@ public:
 
     [[nodiscard]] const std::string &getRecipientNickname() const;
 
-    [[nodiscard]] Peer *getSenderPeer() const;
-
     [[nodiscard]] const std::string &getChannel() const;
 
-    void writePacket(std::vector<uint8_t> &vector) override;
+    [[nodiscard]] uint32_t getPayloadLength() override;
 
     void writePacketPayload(BinaryWriter &writer) override;
 
@@ -109,6 +103,5 @@ private:
     std::string encrypted_content{};
     std::string recipient_nickname{};
     uint64_t sender_peer_id = 0;
-    Peer *sender_peer;
     std::string channel{};
 };

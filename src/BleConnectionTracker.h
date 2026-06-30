@@ -3,7 +3,7 @@
 #include <map>
 #include <set>
 
-#include "include/ble_types.h"
+#include "ble_types.h"
 #include "BleConnection.h"
 #include "Message.h"
 #include "Peer.h"

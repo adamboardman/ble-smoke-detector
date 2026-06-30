@@ -4,7 +4,7 @@
 #include <functional>
 #include <map>
 #include <string>
-#include "include/ble_types.h"
+#include "ble_types.h"
 
 #ifdef MOCK_PICO_PI
 #include "../test/packet_repeater_mocks.h"
