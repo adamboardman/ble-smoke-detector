@@ -758,7 +758,7 @@ void generateMessageIfNeeded() {
 	bool copy_fresh_boot = fresh_boot;
     bool copy_smoke_seen = smoke_seen;
     bool copy_life_check = life_check;
-    if (copy_fresh_boot || copy_smoke_seen || copy_life_check) {
+    if (connection_tracker.weHaveTheTime() && (copy_fresh_boot || copy_smoke_seen || copy_life_check)) {
         pico_unique_board_id_t local_addr;
         pico_get_unique_board_id(&local_addr);
         uint64_t sender{};
@@ -768,7 +768,7 @@ void generateMessageIfNeeded() {
         if (copy_fresh_boot) {
             const std::string booted_string("Booted");
             buffer.write_data(booted_string, booted_string.size());
-            life_check = false;
+            fresh_boot = false;
         }
         if (copy_fresh_boot && (copy_life_check || copy_smoke_seen)) {
             buffer.write_uint8('+');
@@ -778,10 +778,10 @@ void generateMessageIfNeeded() {
             buffer.write_data(still_alive_string, still_alive_string.size());
             life_check = false;
         }
-        if (copy_life_check && copy_smoke_seen) {
+        if (copy_smoke_seen) {
+        if (copy_life_check) {
             buffer.write_uint8('+');
         }
-        if (copy_smoke_seen) {
             const std::string smoke_seen_string = "Smoke seen";
             buffer.write_data(smoke_seen_string, smoke_seen_string.size());
             smoke_seen = false;
@@ -797,8 +797,10 @@ void generateMessageIfNeeded() {
         message.setContent(messageContentString);
         outBuffer.clear();
         buffer.write_uint64(timestamp_ms);
-        if (copy_smoke_seen && copy_life_check) {
+        if (copy_fresh_boot && copy_smoke_seen && copy_life_check) {
             buffer.write_uint8('*');
+        } else if (copy_fresh_boot && copy_smoke_seen) {
+            buffer.write_uint8('+');
         } else if (copy_smoke_seen) {
             buffer.write_uint8('!');
         } else if (copy_life_check) {

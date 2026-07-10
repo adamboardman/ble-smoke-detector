@@ -57,18 +57,18 @@ void generateMessageIfNeeded() {
     if (copy_fresh_boot) {
       const std::string booted_string("Booted");
       buffer.write_data(booted_string, booted_string.size());
-      life_check = false;
+      fresh_boot = false;
     }
-    if (copy_fresh_boot && copy_life_check) {
+    if (copy_fresh_boot && (copy_life_check || copy_smoke_seen)) {
       buffer.write_uint8('+');
     }
     if (copy_life_check) {
-      const std::string still_alive_string = "Still alive";
+      std::string still_alive_string = "Still alive";
       buffer.write_data(still_alive_string, still_alive_string.size());
       life_check = false;
     }
     if (copy_smoke_seen) {
-      if (copy_fresh_boot || copy_life_check) {
+      if (copy_life_check) {
         buffer.write_uint8('+');
       }
       const std::string smoke_seen_string = "Smoke seen";
@@ -85,8 +85,7 @@ void generateMessageIfNeeded() {
     Message message(7, timestamp_ms, 0, sender, 0);
     message.setContent(messageContentString);
     outBuffer.clear();
-    message.setChannel("#smoke");
-    buffer.write_uint32(timestamp_ms);
+    buffer.write_uint64(timestamp_ms);
     if (copy_fresh_boot && copy_smoke_seen && copy_life_check) {
       buffer.write_uint8('*');
     } else if (copy_fresh_boot && copy_smoke_seen) {
@@ -101,6 +100,7 @@ void generateMessageIfNeeded() {
     buffer.write_uint64(sender);
     const std::string messageIdString(reinterpret_cast<const char *>(outBuffer.data()), outBuffer.size());
     message.setMessageId(messageIdString);
+    message.setChannel("#smoke");
 
     std::vector<uint8_t> name_buffer;
     const BinaryWriter name_writer(name_buffer);
