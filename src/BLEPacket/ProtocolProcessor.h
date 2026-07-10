@@ -15,11 +15,9 @@ public:
 
     static const char *stringForType(uint8_t type);
 
-    void updateOrStorePeerNameFromAnnouncement(Announce &announce, BleConnection &connection) const;
+    void updateOrStorePeerNameFromAnnouncement(Announce &announce, BleConnection *connection) const;
 
-    bool processMessage(Base &message, const uint8_t *payload, uint16_t payload_length) const;
-
-    void processWrite(BleConnection &connection, uint16_t offset, const uint8_t *buffer, uint16_t buffer_size) const;
+    void processWrite(BleConnection *connection, uint16_t offset, const uint8_t *buffer, uint16_t buffer_size) const;
 
 private:
     BleConnectionTracker &ble_connection_tracker;

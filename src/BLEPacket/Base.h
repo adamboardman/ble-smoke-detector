@@ -53,6 +53,10 @@ public:
         return (getPacketFlags() & packet_flag_has_route) != 0;
     }
 
+    [[nodiscard]] bool fromMeshtastic() const {
+        return (getPacketFlags() & packet_flag_from_meshtastic) != 0;
+    }
+
     [[nodiscard]] uint64_t getPacketSenderId() const;
 
     void setPacketSenderId(uint64_t senderId);
@@ -69,15 +73,23 @@ public:
 
     [[nodiscard]] virtual std::size_t getPacketHash() const;
 
+    void getPacketSyncId(std::vector<uint8_t> &hash);
+
     void writePacket(std::vector<uint8_t> &vector);
+
+    void setFromMeshtastic(bool cond);
 
     void setMalformed(bool cond);
 
     [[nodiscard]] bool isMalformed() const;
 
-    static void writeVariable(const BinaryWriter &writer, uint8_t type, const std::string &value);
+    [[nodiscard]] uint32_t variableLength(uint8_t type, size_t size) const;
 
-    static uint32_t variableLength(uint8_t type, size_t size);
+    void writeVariable(const BinaryWriter &writer, uint8_t type, const std::string &value);
+
+    void writeVariable(const BinaryWriter &writer, uint8_t type, uint32_t value);
+
+    void writeVariable(const BinaryWriter &writer, uint8_t type, uint8_t value);
 
     virtual void writePacketPayload(BinaryWriter &writer);
 

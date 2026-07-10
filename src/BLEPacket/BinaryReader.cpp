@@ -52,8 +52,39 @@ uint64_t BinaryReader::read_uint64() {
     return ret;
 }
 
+uint8_t BinaryReader::de_hexify(const uint8_t nibble) {
+    auto val = nibble - '0';
+    if (val > 9) {
+        val = 10 + nibble - 'a';
+    }
+    if (val > 9) {
+        val = 10 + nibble - 'A';
+    }
+    return val;
+}
+
+uint8_t BinaryReader::read_hex16_uint8() {
+    return de_hexify(read_uint8()) << 4 | de_hexify(read_uint8());
+}
+
+uint64_t BinaryReader::read_hex16_uint64() {
+    if (pos + 16 > buffer_size) {
+        pos += 16;
+        return 0;
+    }
+    const uint64_t ret = static_cast<uint64_t>(read_hex16_uint8()) << 56 |
+                         static_cast<uint64_t>(read_hex16_uint8()) << 48 |
+                         static_cast<uint64_t>(read_hex16_uint8()) << 40 |
+                         static_cast<uint64_t>(read_hex16_uint8()) << 32 |
+                         static_cast<uint64_t>(read_hex16_uint8()) << 24 |
+                         static_cast<uint64_t>(read_hex16_uint8()) << 16 |
+                         static_cast<uint64_t>(read_hex16_uint8()) << 8 |
+                         static_cast<uint64_t>(read_hex16_uint8());
+    return ret;
+}
+
 uint16_t BinaryReader::read_remainder_len() {
-    return buffer_size-pos;
+    return buffer_size - pos;
 }
 
 const uint8_t *BinaryReader::read_data(const uint16_t len) {

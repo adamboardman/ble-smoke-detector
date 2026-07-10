@@ -1,15 +1,15 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <set>
 
-#include "ble_types.h"
 #include "BleConnection.h"
 #include "Message.h"
 #include "Peer.h"
 #include "Announce.h"
 
-inline uint64_t build_time_ms = 1781273465ll*1000; //Occasionally update this, ms since 1970
+inline uint64_t build_time_ms = 1781273465ll * 1000; //Occasionally update this, ms since 1970
 inline auto one_second_in_us = 1000 * 1000 * 1;
 inline auto two_seconds_in_us = 1000 * 1000 * 2;
 inline auto three_seconds_in_us = 1000 * 1000 * 3;
@@ -20,20 +20,22 @@ inline auto two_minutes_in_us = 1000 * 1000 * 60 * 5;
 inline auto five_minutes_in_us = 1000 * 1000 * 60 * 5;
 inline auto ten_minutes_in_us = 1000 * 1000 * 60 * 10;
 inline auto ten_minutes_in_ms = 1000 * 60 * 10;
+inline auto one_hour_in_ms = 1000 * 60 * 60;
+inline auto twenty_four_hours_in_ms = 1000 * 60 * 60 * 24;
 
 class BleConnectionTracker {
 public:
-    BleConnection &connectionForConnHandle(hci_con_handle_t connection_handle);
+    BleConnection *connectionForConnHandle(hci_con_handle_t connection_handle);
 
     Message *storeMessageAndReturnIfNew(const Message &message);
 
-    Announce *storeAnnounceAndReturnIfNew(Announce &ann);
+    Announce *storeAnnounceAndReturnIfNew(const Announce &ann);
 
     Message *messageWithId(const std::string &id);
 
     Peer *peerWithId(uint64_t id);
 
-    Peer &checkSenderInPeers(uint64_t sender);
+    Peer *checkSenderInPeers(uint64_t sender);
 
     void enqueueTargetedPacket(Base *packet, BleConnection *to_connection);
 
@@ -65,13 +67,17 @@ public:
 
     void printTime();
 
-    int getActiveConnectionCount(bool log=false);
+    int getActiveConnectionCount(bool log = false);
 
     void printStats();
 
-    bool SendPacketToConnection(Base &packet, BleConnection &ble_connection);
+    bool SendPacketToConnection(Base *packet, BleConnection *ble_connection);
 
     bool havePacketsToSend();
+
+    static uint32_t bitchat_sender_id_to_meshtastic_id(uint64_t sender_id);
+
+    static void bitchat_sender_id_to_meshtastic_macaddr(uint64_t sender_id, uint8_t *macaddr);
 
     bool sendPackets();
 
@@ -82,6 +88,8 @@ public:
     void setConnectionStarted(const BleConnection *neighbour);
 
     Announce *getAnyAnnounce();
+
+    Message *getAnyMessage();
 
     void cleanupStaleItems();
 
@@ -121,3 +129,5 @@ private:
     std::multimap<Base *, Peer *> packets_peers_sent_list{};
     std::vector<Base *> broadcast_packets_to_send_list{};
 };
+
+extern BleConnectionTracker *connection_tracker_ptr;

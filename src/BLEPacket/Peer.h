@@ -32,6 +32,8 @@ public:
 
     void setConnectionHandle(uint16_t hci_con_handle);
 
+    [[nodiscard]] uint16_t getConnectionHandle() const;
+
 private:
     uint64_t id{};
     std::string name{};

@@ -7,62 +7,15 @@
 #include "Base.h"
 #include "Peer.h"
 
-enum MessageFlag {
-    message_flag_is_relay = 0x01, //We ignore this - unsupported
-    message_flag_is_private = 0x02, //We ignore this - unsupported
-    message_flag_has_original_sender = 0x04, //We ignore this - unsupported
-    message_flag_has_recipient_nickname = 0x08, //We ignore this - unsupported
-    message_flag_has_sender_peer_id = 0x10,
-    message_flag_has_mentions = 0x20, //We ignore this - unsupported
-    message_flag_has_channel = 0x40,
-    message_flag_is_encrypted = 0x80  //We ignore this - unsupported
-};
-
-class Message final : public Base {
+class Message : public Base {
 public:
     Message();
 
     Message(uint8_t ttl, uint64_t timestamp, uint8_t packet_flags, uint64_t sender, uint64_t recipient);
 
-    Message(uint8_t type, uint8_t version, BinaryReader &reader);
+    Message(uint8_t version, BinaryReader &reader);
 
     ~Message() override {};
-
-    void setMessageFlags(uint8_t flags);
-
-    [[nodiscard]] bool isRelay() const {
-        return (message_flags & message_flag_is_relay) != 0;
-    }
-
-    [[nodiscard]] bool isPrivate() const {
-        return (message_flags & message_flag_is_private) != 0;
-    }
-
-    [[nodiscard]] bool hasOriginalSender() const {
-        return (message_flags & message_flag_has_original_sender) != 0;
-    }
-
-    [[nodiscard]] bool hasRecipientNickname() const {
-        return (message_flags & message_flag_has_recipient_nickname) != 0;
-    }
-
-    [[nodiscard]] bool hasSenderPeerID() const {
-        return (message_flags & message_flag_has_sender_peer_id) != 0;
-    }
-
-    [[nodiscard]] bool hasMentions() const {
-        return (message_flags & message_flag_has_mentions) != 0;
-    }
-
-    [[nodiscard]] bool hasChannel() const {
-        return (message_flags & message_flag_has_channel) != 0;
-    }
-
-    [[nodiscard]] bool isEncrypted() const {
-        return (message_flags & message_flag_is_encrypted) != 0;
-    }
-
-    void setMessageTimestamp(uint64_t value);
 
     void setMessageId(const std::string &string);
 
@@ -72,13 +25,9 @@ public:
 
     void setChannel(const std::string &string);
 
-    void setEncryptedContent(const std::string &string);
+    void setReplyId(uint32_t reply_to_id);
 
-    void setRecipientNickname(const std::string &string);
-
-    [[nodiscard]] uint8_t getMessageFlags() const;
-
-    [[nodiscard]] uint64_t getMessageTimestamp() const;
+    void setEmoji(bool cond);
 
     [[nodiscard]] const std::string &getMessageId() const;
 
@@ -86,22 +35,22 @@ public:
 
     [[nodiscard]] const std::string &getContent() const;
 
-    [[nodiscard]] const std::string &getRecipientNickname() const;
-
     [[nodiscard]] const std::string &getChannel() const;
+
+    [[nodiscard]] uint32_t getReplyId() const;
+
+    [[nodiscard]] uint8_t getMessageFlags() const;
 
     [[nodiscard]] uint32_t getPayloadLength() override;
 
     void writePacketPayload(BinaryWriter &writer) override;
 
 private:
-    uint8_t message_flags = 0;
-    uint64_t message_timestamp_ms = 0;
     std::string message_id{};
     std::string sender_nickname{};
     std::string content{};
-    std::string encrypted_content{};
-    std::string recipient_nickname{};
-    uint64_t sender_peer_id = 0;
+    uint32_t reply_id = 0;
+    uint8_t message_flags = 0;
+    Peer *sender_peer;
     std::string channel{};
 };

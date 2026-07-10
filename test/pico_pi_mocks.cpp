@@ -5,8 +5,10 @@
 #include "Debugging.h"
 #include "pico_pi_mocks.h"
 
-#include "../src/BinaryWriter.h"
+#include "BinaryWriter.h"
 
+class BleConnectionTracker;
+BleConnectionTracker *connection_tracker_ptr=nullptr;
 int lastAddress;
 int last_length_read;
 int last_length_written;
@@ -146,6 +148,9 @@ void populate_string_from_string(std::string *str_out, const std::string &str) {
         j++;
         str_out->at(i) |= (str[j] & '@' ? str[j] + 9 : str[j]) & 0xF;
     }
+}
+
+void pico_get_unique_board_id(pico_unique_board_id_t *id_out) {
 }
 
 void gap_local_bd_addr(bd_addr_t address_buffer) {

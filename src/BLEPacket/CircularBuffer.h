@@ -1,9 +1,9 @@
 #pragma once
 
-#include <cstdarg>
 #include <cstring>
 #include <cassert>
 #include <memory>
+#include <cstdarg>
 #if (PICO_RP2040 || PICO_RP2350)
 // See below #define GUARD_LOCK
 #else

@@ -2,11 +2,11 @@
 #include <NimBLEDevice.h>
 #include <NimBLEAdvertising.h>
 #include <NimBLEAdvertisedDevice.h>
-#include "include/ble_types.h"
-#include "src/BleConnection.h"
-#include "src/BleConnectionTracker.h"
-#include "src/Message.h"
-#include "src/ProtocolProcessor.h"
+#include "src/BLEPacket/ble_types.h"
+#include "src/BLEPacket/BleConnection.h"
+#include "src/BLEPacket/BleConnectionTracker.h"
+#include "src/BLEPacket/Message.h"
+#include "src/BLEPacket/ProtocolProcessor.h"
 
 uint32_t time_us_32() {
   return micros();
@@ -45,43 +45,62 @@ InputPin inputD0smoke = { D0, 0, 1 };
 
 void generateMessageIfNeeded() {
   std::vector<uint8_t> outBuffer;
-  const uint64_t timestamp_ms = connection_tracker.getTimeMs();
-  if (connection_tracker.weHaveTheTime() && (fresh_boot || inputD0smoke.state == 0 || life_check)) {
+  uint64_t timestamp_ms = connection_tracker.getTimeMs();
+  bool copy_fresh_boot = fresh_boot;
+  bool copy_smoke_seen = inputD0smoke.state == 0 || digitalRead(D0) == 0;
+  bool copy_life_check = life_check;
+  if (connection_tracker.weHaveTheTime() && (copy_fresh_boot || copy_smoke_seen || copy_life_check)) {
     auto local_addr = NimBLEDevice::getAddress().reverseByteOrder();  //NimBLE stores addresses in reverse to most others
     uint64_t sender = local_addr;
 
     const BinaryWriter buffer(outBuffer);
-    buffer.write_uint8('[');
-    buffer.write_uint16_hex16(timestamp_ms / 1000);  //hexified seconds
-    buffer.write_uint8(']');
-    if (fresh_boot) {
-      const std::string booted_string(" Booted");
+    if (copy_fresh_boot) {
+      const std::string booted_string("Booted");
       buffer.write_data(booted_string, booted_string.size());
       life_check = false;
     }
-    if (life_check) {
-      const std::string still_alive_string = " Still alive";
+    if (copy_fresh_boot && copy_life_check) {
+      buffer.write_uint8('+');
+    }
+    if (copy_life_check) {
+      const std::string still_alive_string = "Still alive";
       buffer.write_data(still_alive_string, still_alive_string.size());
       life_check = false;
     }
-    if (inputD0smoke.state == 0 || digitalRead(D0) == 0) {
-      const std::string smoke_seen_string = " Smoke seen";
+    if (copy_smoke_seen) {
+      if (copy_fresh_boot || copy_life_check) {
+        buffer.write_uint8('+');
+      }
+      const std::string smoke_seen_string = "Smoke seen";
       buffer.write_data(smoke_seen_string, smoke_seen_string.size());
       inputD0smoke.state = 1;
     }
     const std::string messageContentString(reinterpret_cast<const char *>(outBuffer.data()), outBuffer.size());
 
+    // Reduce the precision of the timestamp to avoid messages being sent too close to each other
+    const uint64_t seconds = timestamp_ms / 1000u;
+    const uint64_t minutes = seconds / 60;
+    timestamp_ms = minutes * 60 * 1000;
+
     Message message(7, timestamp_ms, 0, sender, 0);
     message.setContent(messageContentString);
     outBuffer.clear();
-    message.setMessageFlags(0);
-    message.setChannel("Smoke");
+    message.setChannel("#smoke");
     buffer.write_uint32(timestamp_ms);
-    buffer.write_uint8('-');
+    if (copy_fresh_boot && copy_smoke_seen && copy_life_check) {
+      buffer.write_uint8('*');
+    } else if (copy_fresh_boot && copy_smoke_seen) {
+      buffer.write_uint8('§');
+    } else if (copy_smoke_seen) {
+      buffer.write_uint8('!');
+    } else if (copy_life_check) {
+      buffer.write_uint8('-');
+    } else {
+      buffer.write_uint8('?');
+    }
     buffer.write_uint64(sender);
     const std::string messageIdString(reinterpret_cast<const char *>(outBuffer.data()), outBuffer.size());
     message.setMessageId(messageIdString);
-    message.setMessageTimestamp(timestamp_ms);
 
     std::vector<uint8_t> name_buffer;
     const BinaryWriter name_writer(name_buffer);
@@ -144,7 +163,7 @@ void notifyCB(NimBLERemoteCharacteristic *pRemoteCharacteristic, uint8_t *pData,
   str += ", Characteristic = " + pRemoteCharacteristic->getUUID().toString();
   str += ", Length = ";
   LOG_DEBUG("%s %d\n", str.c_str(), length);
-  auto &context = connection_tracker.connectionForConnHandle(pRemoteCharacteristic->getClient()->getConnHandle());
+  auto *context = connection_tracker.connectionForConnHandle(pRemoteCharacteristic->getClient()->getConnHandle());
   processor.processWrite(context, 0, pData, length);
 }
 
@@ -255,7 +274,7 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
   }
 
   void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override {
-    auto &connection = connection_tracker.connectionForConnHandle(connInfo.getConnHandle());
+    auto *connection = connection_tracker.connectionForConnHandle(connInfo.getConnHandle());
     processor.processWrite(connection, 0, (uint8_t *)pCharacteristic->getValue().c_str(), pCharacteristic->getValue().size());
     global_activity++;
   }

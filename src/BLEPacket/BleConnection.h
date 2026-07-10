@@ -7,7 +7,7 @@
 #include "ble_types.h"
 
 #ifdef MOCK_PICO_PI
-#include "../test/packet_repeater_mocks.h"
+#include "packet_repeater_mocks.h"
 #else
 #ifdef PICO_BOARD
 #include "bluetooth.h"

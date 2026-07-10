@@ -14,7 +14,7 @@ public:
 
     void write_uint16(uint16_t value) const;
 
-    void write_uint32(uint16_t value) const;
+    void write_uint32(uint32_t value) const;
 
     void write_uint64(uint64_t value) const;
 

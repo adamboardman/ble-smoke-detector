@@ -17,6 +17,12 @@ public:
 
     uint64_t read_uint64();
 
+    static uint8_t de_hexify(uint8_t nibble);
+
+    uint8_t read_hex16_uint8();
+
+    uint64_t read_hex16_uint64();
+
     uint16_t read_remainder_len();
 
     const uint8_t *read_data(uint16_t len);

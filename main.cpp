@@ -3,8 +3,8 @@
 #include <cstdio>
 #include <vector>
 
-#include "src/Debugging.h"
-#include "include/int_types.h"
+#include "Debugging.h"
+#include "int_types.h"
 #include "btstack.h"
 #include "hci_dump_embedded_stdout.h"
 #include "pico/cyw43_arch.h"
@@ -17,14 +17,14 @@
 #include "hci.h"
 #include "gap.h"
 #include "pico/unique_id.h"
-#include "src/BinaryReader.h"
-#include "src/ProtocolProcessor.h"
-#include "src/BleConnection.h"
+#include "BinaryReader.h"
+#include "ProtocolProcessor.h"
+#include "BleConnection.h"
 #include "hardware/sync.h"
 #include <cinttypes>
 
-#include "src/BinaryWriter.h"
-#include "src/BleConnectionTracker.h"
+#include "BinaryWriter.h"
+#include "BleConnectionTracker.h"
 #include "hardware/clocks.h"
 #include "hardware/pll.h"
 #include "pico/binary_info/code.h"
@@ -72,6 +72,7 @@ bool fresh_boot = true;
 bool smoke_seen = false;
 bool life_check = false;
 uint16_t global_activity = 0;
+uint8_t conn_count = 0;
 bool scanning = false;
 bool connection_in_progress = false;
 uint32_t disconnection_started_at = 0;
@@ -337,37 +338,37 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
     switch (client_event_type) {
         case GATT_EVENT_MTU: {
             const auto con_handle = gatt_event_mtu_get_handle(packet);
-            BleConnection &connection = connection_tracker.connectionForConnHandle(con_handle);
-            connection.setMtu(gatt_event_mtu_get_MTU(packet));
+            BleConnection *connection = connection_tracker.connectionForConnHandle(con_handle);
+            connection->setMtu(gatt_event_mtu_get_MTU(packet));
             LOG_DEBUG("GATT MTU: %d\n", gatt_event_mtu_get_MTU(packet));
             break;
         }
         case GATT_EVENT_SERVICE_QUERY_RESULT: {
             //0xa1
             const auto con_handle = gatt_event_service_query_result_get_handle(packet);
-            BleConnection &connection = connection_tracker.connectionForConnHandle(con_handle);
+            BleConnection *connection = connection_tracker.connectionForConnHandle(con_handle);
             gatt_event_service_query_result_get_service(packet, &service);
             // dump_service(&service);
             if (!service.uuid16) {
-                connection.storeHandlesIfServiceMatches(service);
+                connection->storeHandlesIfServiceMatches(service);
             }
             break;
         }
         case GATT_EVENT_CHARACTERISTIC_QUERY_RESULT: {
             //0xa2
             const auto con_handle = gatt_event_characteristic_query_result_get_handle(packet);
-            BleConnection &connection = connection_tracker.connectionForConnHandle(con_handle);
+            BleConnection *connection = connection_tracker.connectionForConnHandle(con_handle);
             gatt_event_characteristic_query_result_get_characteristic(packet, &characteristic);
             // dump_characteristic(&characteristic);
             if (!characteristic.uuid16) {
-                connection.storeHandlesIfCharacteristicMatches(characteristic);
+                connection->storeHandlesIfCharacteristicMatches(characteristic);
             }
             break;
         }
         case GATT_EVENT_QUERY_COMPLETE: {
             //0xa0
             const auto con_handle = gatt_event_query_complete_get_handle(packet);
-            const BleConnection &connection = connection_tracker.connectionForConnHandle(con_handle);
+            const BleConnection *connection = connection_tracker.connectionForConnHandle(con_handle);
             const auto service_id = gatt_event_query_complete_get_service_id(packet);
             const auto connection_id = gatt_event_query_complete_get_connection_id(packet);
             const auto status = gatt_event_query_complete_get_att_status(packet);
@@ -377,7 +378,7 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
                       service_id, connection_id, status);
             discover_primary_services = false;
             discover_characteristics_for_service = false;
-            if (connection.canAndNeedToDiscoverPacketCharacteristicsQuery(service)) {
+            if (connection->canAndNeedToDiscoverPacketCharacteristicsQuery(service)) {
                 LOG_DEBUG("gatt_client_discover_characteristics_for_service\n");
                 discover_characteristics_for_service = true;
                 gatt_client_discover_characteristics_for_service_by_uuid128(
@@ -408,6 +409,7 @@ void handle_gatt_client_value_update_event(uint8_t packet_type, uint16_t channel
             auto value = gatt_event_notification_get_value(packet);
             auto connection = connection_tracker.connectionForConnHandle(handle);
             LOG_DEBUG("handle 0x%x, %d, %d, %d, %d\n", handle, service_id, connection_id, value_handle, value_length);
+            print_named_data("packet", value, value_length);
             processor.processWrite(connection, 0, value, value_length);
             break;
         }
@@ -429,14 +431,14 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
     UNUSED(size);
     UNUSED(channel);
     global_activity++;
-    LOG_DEBUG("hci_packet_handler(0x%02x,%d,data,%d)\n", packet_type, channel, size);
+    // LOG_DEBUG("hci_packet_handler(0x%02x,%d,data,%d)\n", packet_type, channel, size);
 
     //ProtocolProcessor::print_named_data("hci_packet", packet, size);
 
     if (packet_type != HCI_EVENT_PACKET) return;
 
     const uint8_t event_type = hci_event_packet_get_type(packet);
-    LOG_DEBUG("event_type: 0x%02x\n", event_type);
+    // LOG_DEBUG("event_type: 0x%02x\n", event_type);
     switch (event_type) {
         case BTSTACK_EVENT_STATE: {
             //0x60
@@ -452,7 +454,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             //0x05
             const auto handle = hci_event_disconnection_complete_get_connection_handle(packet);
             hci_connection_t *hci_connection = hci_connection_for_handle(handle);
-            LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
+            // LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
             LOG_DEBUG("Disconnected with handle 0x%x\n", handle);
             connection_tracker.reportDisconnection(handle);
             global_activity++;
@@ -495,25 +497,25 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             const uint16_t handle = gap_event_rssi_measurement_get_con_handle(packet);
             const auto role = gap_get_role(handle);
             auto connection = connection_tracker.connectionForConnHandle(handle);
-            connection.setRssi(rssi);
+            connection->setRssi(rssi);
             LOG_DEBUG("RSSI(0x%x): %d, role: %d\n", handle, rssi, role);
             break;
         }
         case BTSTACK_EVENT_NR_CONNECTIONS_CHANGED: {
             //0x61 - part of connect[3]
-            const uint8_t conn_count = btstack_event_nr_connections_changed_get_number_connections(packet);
+            conn_count = btstack_event_nr_connections_changed_get_number_connections(packet);
             LOG_DEBUG("Number of connections changed: %d\n", conn_count);
             break;
         }
         case HCI_EVENT_LE_META: {
             const auto sub_code = hci_event_le_meta_get_subevent_code(packet);
             print_named_data("hci_packet", packet, size);
-            LOG_DEBUG("HCI_EVENT_LE_META 0x%02x\n", sub_code);
+            // LOG_DEBUG("HCI_EVENT_LE_META 0x%02x\n", sub_code);
             switch (sub_code) {
                 case HCI_SUBEVENT_LE_CONNECTION_COMPLETE: {
                     const auto handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
                     hci_connection_t *hci_connection = hci_connection_for_handle(handle);
-                    LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
+                    // LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
                     const auto role = hci_subevent_le_connection_complete_get_role(packet);
                     const auto address_type = static_cast<bd_addr_type_t>(
                         hci_subevent_le_connection_complete_get_peer_address_type(packet));
@@ -608,8 +610,13 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             }
             break;
         }
+        case HCI_EVENT_COMMAND_COMPLETE: //0x0e
+            print_named_data("hci_event command completed", packet, size);
+            break;
         case HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS: //0x13
-        case HCI_EVENT_TRANSPORT_PACKET_SENT: //0x6e
+            print_named_data("hci_event packets completed", packet, size);
+            break;
+        case HCI_EVENT_TRANSPORT_PACKET_SENT: //0x6e - outgoing packet
             //ignore
             break;
         default:
@@ -747,52 +754,70 @@ void reduce_clock(const uint32_t speed) {
 
 void generateMessageIfNeeded() {
     std::vector<uint8_t> outBuffer;
-    const uint64_t timestamp_ms = connection_tracker.getTimeMs();
-    if (fresh_boot || smoke_seen || life_check) {
-        bd_addr_t local_addr;
-        gap_local_bd_addr(local_addr);
+    uint64_t timestamp_ms = connection_tracker.getTimeMs();
+	bool copy_fresh_boot = fresh_boot;
+    bool copy_smoke_seen = smoke_seen;
+    bool copy_life_check = life_check;
+    if (copy_fresh_boot || copy_smoke_seen || copy_life_check) {
+        pico_unique_board_id_t local_addr;
+        pico_get_unique_board_id(&local_addr);
         uint64_t sender{};
-        memcpy(&sender, local_addr, BD_ADDR_LEN);
+        memcpy(&sender, &local_addr, sizeof(uint64_t));
 
         const BinaryWriter buffer(outBuffer);
-        buffer.write_uint8('[');
-        buffer.write_uint16_hex16(timestamp_ms / 1000); //hexified seconds
-        buffer.write_uint8(']');
-        if (fresh_boot) {
-            const std::string booted_string(" Booted");
+        if (copy_fresh_boot) {
+            const std::string booted_string("Booted");
             buffer.write_data(booted_string, booted_string.size());
             life_check = false;
         }
-        if (life_check) {
-            const std::string still_alive_string = " Still alive";
+        if (copy_fresh_boot && (copy_life_check || copy_smoke_seen)) {
+            buffer.write_uint8('+');
+        }
+        if (copy_life_check) {
+            std::string still_alive_string = "Still alive";
             buffer.write_data(still_alive_string, still_alive_string.size());
             life_check = false;
         }
-        if (smoke_seen) {
-            const std::string smoke_seen_string = " Smoke seen";
+        if (copy_life_check && copy_smoke_seen) {
+            buffer.write_uint8('+');
+        }
+        if (copy_smoke_seen) {
+            const std::string smoke_seen_string = "Smoke seen";
             buffer.write_data(smoke_seen_string, smoke_seen_string.size());
             smoke_seen = false;
         }
         const std::string messageContentString(reinterpret_cast<const char *>(outBuffer.data()), outBuffer.size());
 
-        Message message(7, timestamp_ms, 0, sender);
+        // Reduce the precision of the timestamp to avoid messages being sent too close to each other
+        const uint64_t seconds = timestamp_ms / 1000u;
+        const uint64_t minutes = seconds / 60;
+        timestamp_ms = minutes * 60 * 1000;
+
+        Message message(7, timestamp_ms, 0, sender, 0);
         message.setContent(messageContentString);
         outBuffer.clear();
-        message.setMessageFlags(0);
-        buffer.write_uint32(timestamp_ms);
-        buffer.write_uint8('-');
+        buffer.write_uint64(timestamp_ms);
+        if (copy_smoke_seen && copy_life_check) {
+            buffer.write_uint8('*');
+        } else if (copy_smoke_seen) {
+            buffer.write_uint8('!');
+        } else if (copy_life_check) {
+            buffer.write_uint8('-');
+        } else {
+            buffer.write_uint8('?');
+        }
         buffer.write_uint64(sender);
         const std::string messageIdString(reinterpret_cast<const char *>(outBuffer.data()), outBuffer.size());
         message.setMessageId(messageIdString);
-        message.setMessageTimestamp(timestamp_ms);
+        message.setChannel("#smoke");
 
         std::vector<uint8_t> name_buffer;
         const BinaryWriter name_writer(name_buffer);
         name_writer.write_data(reinterpret_cast<const uint8_t *>(ble_smoke_detector_service_name),
                                strlen(ble_smoke_detector_service_name));
-        name_writer.write_data(":",1);
-        name_writer.write_uint8_hex16(local_addr[BD_ADDR_LEN - 2]);
-        name_writer.write_uint8_hex16(local_addr[BD_ADDR_LEN - 1]);
+        name_writer.write_data(":", 1);
+        name_writer.write_uint8_hex16(local_addr.id[6]);
+        name_writer.write_uint8_hex16(local_addr.id[7]);
         message.setSenderNickname(std::string(reinterpret_cast<const char *>(name_buffer.data()), name_buffer.size()));
 
         if (Base *messageIfNew = connection_tracker.storeMessageAndReturnIfNew(message)) {
@@ -926,7 +951,7 @@ int main() {
         connection_tracker.sendPackets();
         printAvailableLogging();
 
-        if ((loopStart - lastFlash) > two_seconds_in_us) {
+        if (loopStart - lastFlash > (conn_count > 0 ? one_second_in_us : three_seconds_in_us)) {
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
             sleep_ms(10);
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);

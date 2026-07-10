@@ -25,19 +25,21 @@ add_definitions(-DPICO_CYW43_ARCH_DEFAULT_COUNTRY_CODE=CYW43_COUNTRY_UK)
 pico_sdk_init()
 
 add_executable(ble_smoke_detector main.cpp
-        src/BleConnection.cpp
-        src/BleConnectionTracker.cpp
-        src/Debugging.cpp
-        src/Peer.cpp
-        src/Base.cpp
-        src/Announce.cpp
-        src/Message.cpp
-        src/ProtocolProcessor.cpp
-        src/BinaryReader.cpp
-        src/BinaryWriter.cpp
+        src/BLEPacket/BleConnection.cpp
+        src/BLEPacket/BleConnectionTracker.cpp
+        src/BLEPacket/Debugging.cpp
+        src/BLEPacket/Peer.cpp
+        src/BLEPacket/Base.cpp
+        src/BLEPacket/Announce.cpp
+        src/BLEPacket/Message.cpp
+        src/BLEPacket/ProtocolProcessor.cpp
+        src/BLEPacket/BinaryReader.cpp
+        src/BLEPacket/BinaryWriter.cpp
 )
 
-include_directories(include src)
+include_directories(
+        src/BLEPacket
+)
 
 pico_enable_stdio_usb(ble_smoke_detector 1) # Use this when debugging from a uf2 usb dropped build
 pico_enable_stdio_uart(ble_smoke_detector 1) # Use this when debugging through the debugger

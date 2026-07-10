@@ -194,12 +194,30 @@ void Base::writePacket(std::vector<uint8_t> &vector) {
     writer.write_uint8(0);
 }
 
+void Base::setFromMeshtastic(const bool cond) {
+    if (cond) {
+        packet_flags |= packet_flag_from_meshtastic;
+    } else {
+        packet_flags &= ~packet_flag_from_meshtastic;
+    }
+}
+
 void Base::setMalformed(const bool cond) {
     malformed = cond;
 }
 
 bool Base::isMalformed() const {
     return malformed;
+}
+
+uint32_t Base::variableLength(const uint8_t type, const size_t size) const {
+    uint32_t value_len = 2;
+    if (packet_type == type_announce && type == tlv_announce_direct_neighbors) {
+        value_len += static_cast<uint8_t>(std::min(static_cast<size_t>(248), size * 8));
+    } else {
+        value_len += static_cast<uint8_t>(std::min(static_cast<size_t>(255), size));
+    }
+    return value_len;
 }
 
 void Base::writeVariable(const BinaryWriter &writer, uint8_t type, const std::string &value) {
@@ -209,21 +227,16 @@ void Base::writeVariable(const BinaryWriter &writer, uint8_t type, const std::st
     writer.write_data(value, value_len);
 }
 
-uint32_t Base::variableLength(const uint8_t type, const size_t size) {
-    uint32_t value_len = 2;
-    switch (type) {
-        case type_nickname:
-        case type_noise_public_key:
-        case type_signing_public_key:
-            value_len += static_cast<uint8_t>(std::min(static_cast<size_t>(255), size));
-            break;
-        case type_direct_neighbors:
-            value_len += static_cast<uint8_t>(std::min(static_cast<size_t>(248), size * 8));
-            break;
-        default:
-            break;
-    }
-    return value_len;
+void Base::writeVariable(const BinaryWriter &writer, uint8_t type, const uint32_t value) {
+    writer.write_uint8(type);
+    writer.write_uint8(sizeof(value));
+    writer.write_uint32(value);
+}
+
+void Base::writeVariable(const BinaryWriter &writer, uint8_t type, const uint8_t value) {
+    writer.write_uint8(type);
+    writer.write_uint8(sizeof(value));
+    writer.write_uint8(value);
 }
 
 void Base::writePacketPayload(BinaryWriter &writer) {

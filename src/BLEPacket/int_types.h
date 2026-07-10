@@ -1,5 +1,11 @@
 #pragma once
 
+#include <cstdint>
+
+#ifdef PICO_BOARD
+#include "hardware/timer.h"
+#endif
+
 // inttypes.h appears to be unavailable so we define some useful things ourselves
 
 #if !defined(PRIu64) or !defined(PRIx64)
@@ -31,4 +37,13 @@
 
 #ifndef PRIb32
 # define PRIb32		__PRI32_PREFIX "b"
+#endif
+
+typedef uint32_t TickType_t;
+// #define portMAX_DELAY UINT32_MAX
+
+#ifdef PICO_BOARD
+inline auto millis() {
+    return time_us_64()/1000;
+}
 #endif

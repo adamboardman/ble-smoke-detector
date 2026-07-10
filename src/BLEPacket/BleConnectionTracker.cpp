@@ -20,6 +20,7 @@
 #include "pico/time.h"
 #include "hardware/timer.h"
 #include "ble/att_server.h"
+#include "pico/unique_id.h"
 #else
 #include "ble_types.h"
 #endif
@@ -51,12 +52,12 @@ void packet_can_write_without_response_handler(void *context) {
         connection_tracker_ptr->writeRawPacket(con_handle);
 }
 
-BleConnection &BleConnectionTracker::connectionForConnHandle(const hci_con_handle_t connection_handle) {
+BleConnection *BleConnectionTracker::connectionForConnHandle(const hci_con_handle_t connection_handle) {
     if (const auto search = connections.find(connection_handle); search != connections.end()) {
-        return connections[connection_handle];
+        return &connections[connection_handle];
     }
     connections[connection_handle].setConnectionHandle(connection_handle);
-    return connections[connection_handle];
+    return &connections[connection_handle];
 }
 
 Message *BleConnectionTracker::storeMessageAndReturnIfNew(const Message &message) {
@@ -69,14 +70,21 @@ Message *BleConnectionTracker::storeMessageAndReturnIfNew(const Message &message
     return &messages[id];
 }
 
-Announce *BleConnectionTracker::storeAnnounceAndReturnIfNew(Announce &ann) {
+Announce *BleConnectionTracker::storeAnnounceAndReturnIfNew(const Announce &ann) {
     if (ann.isMalformed()) return nullptr;
-    const auto id = ann.getPacketHash();
+    const Announce *found = nullptr;
+    const auto id = ann.getAnnounceHash();
     if (const auto search = announces.find(id); search != announces.end()) {
-        return nullptr; //announce was found so it not new
+        found = &search->second;
     }
-    announces[id] = std::move(ann);
-    return &announces[id];
+    if (!found || found->getPacketTimestamp() < ann.getPacketTimestamp()) {
+        announces[id] = ann;
+        if (found && found->getName() != ann.getName()) {
+
+        }
+        return &announces[id];
+    }
+    return nullptr;
 }
 
 Message *BleConnectionTracker::messageWithId(const std::string &id) {
@@ -93,11 +101,11 @@ Peer *BleConnectionTracker::peerWithId(const uint64_t id) {
     return nullptr;
 }
 
-Peer &BleConnectionTracker::checkSenderInPeers(const uint64_t sender) {
+Peer *BleConnectionTracker::checkSenderInPeers(const uint64_t sender) {
     if (const auto search = peers.find(sender); search == peers.end()) {
         peers[sender].setId(sender);
     }
-    return peers[sender];
+    return &peers[sender];
 }
 
 void BleConnectionTracker::enqueueBroadcastPacket(Base *packet) {
@@ -108,8 +116,7 @@ void BleConnectionTracker::enqueueBroadcastPacket(Base *packet) {
 
 void BleConnectionTracker::enqueueBroadcastPacket(Base *packet, BleConnection *from_connection,
                                                   Peer *from_peer) {
-    packets_connections_sent_list.emplace(packet, from_connection);
-    packets_peers_sent_list.emplace(packet, from_peer);
+    packets_peers_sent_list.emplace(packet, from_peer); //Do we use this?
     enqueueBroadcastPacket(packet);
 }
 
@@ -319,17 +326,17 @@ void BleConnectionTracker::printStats() {
 #pragma GCC push_options
 #pragma GCC optimize ("O0")
 
-bool BleConnectionTracker::SendPacketToConnection(Base &packet, BleConnection &ble_connection) {
+bool BleConnectionTracker::SendPacketToConnection(Base *packet, BleConnection *ble_connection) {
     std::vector<uint8_t> packet_data;
-    packet.writePacket(packet_data);
+    packet->writePacket(packet_data);
 
-    if (ble_connection.getMtu() && packet_data.size() > ble_connection.getMtu()) {
-        LOG_DEBUG("SendPacketToConnection packet to big %lu, %d", packet_data.size(), ble_connection.getMtu());
+    if (ble_connection->getMtu() && packet_data.size() > ble_connection->getMtu()) {
+        LOG_DEBUG("SendPacketToConnection packet to big %lu, %d", packet_data.size(), ble_connection->getMtu());
         //TODO - implement fragment creation
         return false;
     }
 
-    const uint16_t con_handle = ble_connection.getConnectionHandle();
+    const uint16_t con_handle = ble_connection->getConnectionHandle();
     std::string peer_string{};
     uint64_t sender_id = 0;
     const auto peer = peerWithConnectionHandle(con_handle);
@@ -343,11 +350,11 @@ bool BleConnectionTracker::SendPacketToConnection(Base &packet, BleConnection &b
     hci_connection_t *hci_connection = hci_connection_for_handle(con_handle);
 
     LOG_DEBUG("SendPacketToConnection - type(%d), peer(%s:0x%" PRIx64 "), hci_connection_for_handle(0x%x), hc(0x%p)\n",
-              packet.getPacketType(), peer_string.c_str(), sender_id,
+              packet->getPacketType(), peer_string.c_str(), sender_id,
               con_handle, hci_connection);
     uint8_t status = 0;
-    ble_connection.setHasData(true);
-    if (ble_connection.getRole() == HCI_ROLE_SLAVE) {
+    ble_connection->setHasData(true);
+    if (ble_connection->getRole() == HCI_ROLE_SLAVE) {
         raw_packet_to_notify.emplace(con_handle, packet_data);
         notify_context_callback_registration.callback = &packet_can_send_notification_handler;
         notify_context_callback_registration.context = reinterpret_cast<void *>(con_handle);
@@ -380,7 +387,7 @@ bool BleConnectionTracker::SendPacketToConnection(Base &packet, BleConnection &b
             if (pChr->canWrite()) {
                 if (pChr->writeValue(packet_data)) {
                     LOG_DEBUG("SendPacketToConnection - wrote value - type(%d), con_handle(0x%x)\n",
-                              packet.getPacketType(), con_handle);
+                              packet->getPacketType(), con_handle);
                     return true;
                 }
             }
@@ -393,7 +400,7 @@ bool BleConnectionTracker::SendPacketToConnection(Base &packet, BleConnection &b
             if (lChr) {
                 if (lChr->notify(packet_data.data(), packet_data.size(), con_handle)) {
                     LOG_DEBUG("SendPacketToConnection - notified our characteristic - type(%d), con_handle(0x%x)\n",
-                              packet.getPacketType(), con_handle);
+                              packet->getPacketType(), con_handle);
                     return true;
                 }
             }
@@ -401,7 +408,7 @@ bool BleConnectionTracker::SendPacketToConnection(Base &packet, BleConnection &b
     }
 
     LOG_DEBUG("SendPacketToConnection - Write without response failedtype(%d), con_handle(0x%x)\n",
-              packet.getPacketType(), con_handle);
+              packet->getPacketType(), con_handle);
     return false;
 #endif
 }
@@ -435,22 +442,24 @@ bool BleConnectionTracker::sendPackets() {
     std::set<Base *> broadcast_packets_to_remove;
     for (auto packet: broadcast_packets_to_send_list) {
         bool connections_exist = false;
-        LOG_DEBUG("Checking Broadcast Packet Sendable %p\n", packet);
+        LOG_DEBUG("Checking Broadcast Packet Sendable %p ", packet);
         for (auto &connection: available_connections) {
             bool sendable = true;
             for (auto search = packets_connections_sent_list.find(packet);
                  search != packets_connections_sent_list.end(); ++search) {
                 if (search->second->getConnectionHandle() == connection.getConnectionHandle()) {
-                    // LOG_DEBUG("Not Sendable 0x%x\n", connection.getConnectionHandle());
+                    LOG_DEBUG("-");
                     sendable = false;
                 }
             }
             if (sendable) {
-                SendPacketToConnection(*packet, connection);
+                LOG_DEBUG("+");
+                SendPacketToConnection(packet, &connection);
                 packets_connections_sent_list.emplace(packet, &connection);
             }
             connections_exist = true;
         }
+        LOG_DEBUG("\n");
 
         if (connections_exist) {
             broadcast_packets_to_remove.emplace(packet);
@@ -488,6 +497,13 @@ void BleConnectionTracker::setConnectionStarted(const BleConnection *neighbour) 
 Announce *BleConnectionTracker::getAnyAnnounce() {
     if (!announces.empty()) {
         return &announces.begin()->second;
+    }
+    return nullptr;
+}
+
+Message *BleConnectionTracker::getAnyMessage() {
+    if (!messages.empty()) {
+        return &messages.begin()->second;
     }
     return nullptr;
 }

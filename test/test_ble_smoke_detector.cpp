@@ -6,15 +6,12 @@
 
 #include "Debugging.h"
 #include "pico_pi_mocks.h"
-#include "../src/BinaryReader.h"
-#include "../src/BinaryWriter.h"
-#include "../src/BleConnectionTracker.h"
+#include "BinaryReader.h"
+#include "BinaryWriter.h"
+#include "BleConnectionTracker.h"
 
-const std::string data_booted = "014207000000000000096b000000aeedd867cf2c00000000000000096b0d0000096b2d0000aeedd867cf2c12536d6f6b654465746563746f723a65646165000d5b303030325d20426f6f746564";
-const std::string data_still_alive = "014207000000000000316100000082f2d867cf2c0000000000000031610d000031612d000082f2d867cf2c0d52657065617465723a6632383200125b303030635d205374696c6c20616c697665";
-const std::string data_smoke_seen = "014207000000000000320b00000082f2d867cf2c00000000000000320b0d0000320b2d000082f2d867cf2c0d52657065617465723a6632383200115b303030635d20536d6f6b65207365656e";
-
-BleConnectionTracker *connection_tracker_ptr=nullptr;
+const std::string data_booted = "0102070000019f4c69f4000000330000724860b2f180000d4c69f4003f0000724860b2f1807d12536d6f6b654465746563746f723a343837327f0623736d6f6b657e06426f6f74656400";
+const std::string data_booted_smoke_seen = "0102070000019f4c6bc8c000003e0000724860b2f180000d4c6bc8c0a70000724860b2f1807d12536d6f6b654465746563746f723a343837327f0623736d6f6b657e11426f6f7465642b536d6f6b65207365656e00";
 
 TEST_CASE("ReadDataBooted", "[booted]") {
     const uint8_t datalen=data_booted.length()/2;
@@ -23,87 +20,101 @@ TEST_CASE("ReadDataBooted", "[booted]") {
 
     BinaryReader reader(0,uint_array,sizeof(uint_array));
 
-    REQUIRE(reader.read_uint8() == 1);//version
-    REQUIRE(reader.read_uint8() == 0x42);//type
-    REQUIRE(reader.read_uint8() == 7);//ttl
-    REQUIRE(reader.read_uint64() == 0x96b);//timestamp
-    REQUIRE(reader.read_uint8() == 0);//packet flags
-    REQUIRE(reader.read_uint64() == 0xaeedd867cf2c);//sender id
-    REQUIRE(reader.read_uint8() == 0);//message flags
-    REQUIRE(reader.read_uint64() == 0x96b);//timestamp
+    REQUIRE(reader.read_uint8() == 1); //version
+    REQUIRE(reader.read_uint8() == 2); //type
+    REQUIRE(reader.read_uint8() == 7); //ttl
+    REQUIRE(reader.read_uint64() == 0x19f4c69f400); //timestamp
+    REQUIRE(reader.read_uint8() == 0); //packet flags
+    REQUIRE(reader.read_uint16() == 51); //payload length
+    REQUIRE(reader.read_uint64() == 0x724860b2f180); //sender id
 
-    auto message_id_length = reader.read_uint8();
-    REQUIRE(message_id_length == 13);
-    REQUIRE(reader.read_uint32() == 0x000096b);//message id first third - time
-    REQUIRE(reader.read_uint8() == 0x2d);//divider
-    REQUIRE(reader.read_uint64() == 0x0000aeedd867cf2c);//message id last two thirds
+    //Message
+    REQUIRE(reader.read_uint8() == tlv_message_id);
+    auto messageIdLength = reader.read_uint8();
+    REQUIRE(messageIdLength == 13);
+    const uint8_t *mesIdRead = reader.read_data(messageIdLength);
+    uint8_t mesIdExpected[] = {76,105,0xF4,0,63,0,0,114,72,96,178,241,128};
+    REQUIRE(mesIdRead[0] == mesIdExpected[0]);
+    REQUIRE(mesIdRead[3] == mesIdExpected[3]);
+    REQUIRE(mesIdRead[4] == mesIdExpected[4]);
+    REQUIRE(mesIdRead[5] == mesIdExpected[5]);
+    REQUIRE(mesIdRead[6] == mesIdExpected[6]);
+    REQUIRE(mesIdRead[7] == mesIdExpected[7]);
+    REQUIRE(mesIdRead[8] == mesIdExpected[8]);
+    REQUIRE(mesIdRead[9] == mesIdExpected[9]);
+    REQUIRE(mesIdRead[10] == mesIdExpected[10]);
+    REQUIRE(mesIdRead[11] == mesIdExpected[11]);
+    REQUIRE(mesIdRead[12] == mesIdExpected[12]);
 
-    auto sender_nick_length = reader.read_uint8();
-    REQUIRE(sender_nick_length == 18);
-    auto sender_nick = reader.read_data(sender_nick_length);
-    auto sender_nick_string = std::string(reinterpret_cast<const char *>(sender_nick), sender_nick_length);
-    REQUIRE(sender_nick_string == "SmokeDetector:edae");
+    REQUIRE(reader.read_uint8() == tlv_message_sender_nickname);
+    auto senderNickLength = reader.read_uint8();
+    REQUIRE(senderNickLength == 18);
+    std::string senderNick(reinterpret_cast<const char *>(reader.read_data(senderNickLength)), senderNickLength);
+    REQUIRE(senderNick == "SmokeDetector:4872");
 
-    uint16_t content_length = reader.read_uint16();
-    REQUIRE(content_length == 0xd);
-    auto content = reader.read_data(content_length);
-    auto content_string = std::string(reinterpret_cast<const char *>(content), content_length);
-    REQUIRE(content_string == "[0002] Booted");
+    REQUIRE(reader.read_uint8() == tlv_message_channel);
+    auto channelLength = reader.read_uint8();
+    REQUIRE(channelLength == 6);
+    std::string channel(reinterpret_cast<const char *>(reader.read_data(channelLength)), channelLength);
+    REQUIRE(channel == "#smoke");
+
+    REQUIRE(reader.read_uint8() == tlv_message_channel_content);
+    auto payloadLength = reader.read_uint8();
+    REQUIRE(payloadLength == 6);
+    std::string content(reinterpret_cast<const char *>(reader.read_data(payloadLength)), payloadLength);
+    REQUIRE(content == "Booted");
 }
 
 TEST_CASE("WriteDataStillAlive", "[still_alive]") {
-    std::vector<uint8_t> uint8_target;
-    populate_vector_from_string(&uint8_target, data_still_alive);
-
-    std::vector<uint8_t> uint8_vector;
-    BinaryWriter writer(uint8_vector);
-
-    writer.write_uint8(1); //version
-    writer.write_uint8(0x42); //type
-    writer.write_uint8(7);//ttl
-    writer.write_uint64(0x3161); //timestamp
-    writer.write_uint8(0); //flags
-    writer.write_uint64(0x82f2d867cf2c); //sender
-    writer.write_uint8(0); //message flags
-    writer.write_uint64(0x3161); //message timestamp
-
-    REQUIRE(29 == writer.test_only_current_pos());
-    auto eq = std::equal(std::begin(uint8_vector), std::end(uint8_vector), std::begin(uint8_target));
-    REQUIRE(true == eq);
-}
-
-TEST_CASE("ReadDataSmokeSeen", "[data_smoke_seen]") {
-    const uint8_t datalen=data_smoke_seen.length()/2;
+    const uint8_t datalen=data_booted_smoke_seen.length()/2;
     uint8_t uint_array[datalen];
-    populate_array_from_string(uint_array, data_smoke_seen);
+    populate_array_from_string(uint_array, data_booted_smoke_seen);
 
     BinaryReader reader(0,uint_array,sizeof(uint_array));
 
-    REQUIRE(reader.read_uint8() == 1);//version
-    REQUIRE(reader.read_uint8() == 0x42);//type
-    REQUIRE(reader.read_uint8() == 7);//ttl
-    REQUIRE(reader.read_uint64() == 0x320b);//timestamp
-    REQUIRE(reader.read_uint8() == 0);//flags
-    REQUIRE(reader.read_uint64() == 0x82f2d867cf2c);//sender
-    REQUIRE(reader.read_uint8() == 0);//message flags
-    REQUIRE(reader.read_uint64() == 0x320b);//message timestamp
+    REQUIRE(reader.read_uint8() == 1); //version
+    REQUIRE(reader.read_uint8() == 2); //type
+    REQUIRE(reader.read_uint8() == 7); //ttl
+    REQUIRE(reader.read_uint64() == 0x19f4c6bc8c0); //timestamp
+    REQUIRE(reader.read_uint8() == 0); //packet flags
+    REQUIRE(reader.read_uint16() == 62); //payload length
+    REQUIRE(reader.read_uint64() == 0x724860b2f180); //sender id
 
-    auto message_id_length = reader.read_uint8();
-    REQUIRE(message_id_length == 13);
-    REQUIRE(reader.read_uint32() == 0x320b);//message id first third - time
-    REQUIRE(reader.read_uint8() == 0x2d);//divider
-    REQUIRE(reader.read_uint64() == 0x82f2d867cf2c);//message id last two thirds
+    //Message
+    REQUIRE(reader.read_uint8() == tlv_message_id);
+    auto messageIdLength = reader.read_uint8();
+    REQUIRE(messageIdLength == 13);
+    const uint8_t *mesIdRead = reader.read_data(messageIdLength);
+    uint8_t mesIdExpected[] = {76,107,200,192,167,0,0,114,72,96,178,241,128};
+    REQUIRE(mesIdRead[0] == mesIdExpected[0]);
+    REQUIRE((int)(mesIdRead[1]) == mesIdExpected[1]);
+    REQUIRE((int)mesIdRead[2] == mesIdExpected[2]);
+    REQUIRE((int)mesIdRead[3] == mesIdExpected[3]);
+    REQUIRE((int)mesIdRead[4] == mesIdExpected[4]);
+    REQUIRE(mesIdRead[5] == mesIdExpected[5]);
+    REQUIRE(mesIdRead[6] == mesIdExpected[6]);
+    REQUIRE(mesIdRead[7] == mesIdExpected[7]);
+    REQUIRE(mesIdRead[8] == mesIdExpected[8]);
+    REQUIRE(mesIdRead[9] == mesIdExpected[9]);
+    REQUIRE(mesIdRead[10] == mesIdExpected[10]);
+    REQUIRE(mesIdRead[11] == mesIdExpected[11]);
+    REQUIRE(mesIdRead[12] == mesIdExpected[12]);
 
-    auto sender_nick_length = reader.read_uint8();
-    REQUIRE(sender_nick_length == 13);
-    auto sender_nick = reader.read_data(sender_nick_length);
-    auto sender_nick_string = std::string(reinterpret_cast<const char *>(sender_nick), sender_nick_length);
-    REQUIRE(sender_nick_string == "Repeater:f282");
+    REQUIRE(reader.read_uint8() == tlv_message_sender_nickname);
+    auto senderNickLength = reader.read_uint8();
+    REQUIRE(senderNickLength == 18);
+    std::string senderNick(reinterpret_cast<const char *>(reader.read_data(senderNickLength)), senderNickLength);
+    REQUIRE(senderNick == "SmokeDetector:4872");
 
-    uint16_t content_length = reader.read_uint16();
-    REQUIRE(content_length == 17);
-    auto content = reader.read_data(content_length);
-    auto content_string = std::string(reinterpret_cast<const char *>(content), content_length);
-    REQUIRE(content_string == "[000c] Smoke seen");
+    REQUIRE(reader.read_uint8() == tlv_message_channel);
+    auto channelLength = reader.read_uint8();
+    REQUIRE(channelLength == 6);
+    std::string channel(reinterpret_cast<const char *>(reader.read_data(channelLength)), channelLength);
+    REQUIRE(channel == "#smoke");
+
+    REQUIRE(reader.read_uint8() == tlv_message_channel_content);
+    auto payloadLength = reader.read_uint8();
+    REQUIRE(payloadLength == 17);
+    std::string content(reinterpret_cast<const char *>(reader.read_data(payloadLength)), payloadLength);
+    REQUIRE(content == "Booted+Smoke seen");
 }
-

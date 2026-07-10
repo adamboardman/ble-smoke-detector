@@ -46,3 +46,7 @@ void Peer::setAnnounceTtl(const uint8_t ttl) {
 void Peer::setConnectionHandle(uint16_t hci_con_handle) {
     connection_handle = hci_con_handle;
 }
+
+uint16_t Peer::getConnectionHandle() const {
+    return connection_handle;
+}

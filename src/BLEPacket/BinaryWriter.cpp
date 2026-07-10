@@ -11,7 +11,7 @@ void BinaryWriter::write_uint16(const uint16_t value) const {
     vector.push_back(static_cast<uint8_t>(value) & 0xFF);
 }
 
-void BinaryWriter::write_uint32(const uint16_t value) const {
+void BinaryWriter::write_uint32(const uint32_t value) const {
     vector.reserve(vector.size() + 4);
     vector.push_back(static_cast<uint8_t>(value >> 24) & 0xFF);
     vector.push_back(static_cast<uint8_t>(value >> 16) & 0xFF);

@@ -8,7 +8,7 @@
 #include "pico/time.h"
 #endif
 
-CircularBuffer<char> serialLogBuffer(3000);
+CircularBuffer<char> serialLogBuffer(2000);
 
 #define SERIAL_LOG_BUFFER_LEN 160
 
@@ -29,7 +29,7 @@ void printAvailableLogging() {
             putchar(line[i]);
         }
         putchar('\n');
-        sleep_ms(1);
+        // sleep_ms(1);
     }
     serialLogBuffer.clear_if_empty(); //try to keep logging within only one block
 }
