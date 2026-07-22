@@ -1,5 +1,22 @@
 #include "Debugging.h"
 
+void print_named_data(const char *name, const uint8_t *data, const uint16_t data_size) {
+    LOG_DEBUG("%s:", name);
+    for (int i = 0; i < data_size; i++) {
+        LOG_DEBUG("%02x", data[i]);
+    }
+    LOG_DEBUG("\n");
+    LOG_DEBUG("%s[c]:", name);
+    for (int i = 0; i < data_size; i++) {
+        if (data[i] >= 0x20 && data[i] < 0x7e) {
+            LOG_DEBUG("%c", data[i]);
+        } else {
+            LOG_DEBUG(" ");
+        }
+    }
+    LOG_DEBUG("\n");
+}
+
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
 
 #ifdef MOCK_PICO_PI

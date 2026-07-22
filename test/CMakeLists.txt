@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.12)
 
-add_definitions(-DMOCK_PICO_PI)
-
 project(tests)
-
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_CXX_STANDARD 23)
+
+add_definitions(-DMOCK_PICO_PI)
 
 find_package(Catch2 REQUIRED)
 
@@ -20,6 +19,8 @@ add_executable(tests
         ../src/BLEPacket/BinaryWriter.cpp
         ../src/BLEPacket/Message.cpp
         ../src/BLEPacket/Announce.cpp
+        ../src/BLEPacket/MicroMeshPreferences.cpp
+        ../src/BLEPacket/Debugging.cpp
         pico_pi_mocks.cpp
         test_ble_smoke_detector.cpp
         test_circular_buffer.cpp

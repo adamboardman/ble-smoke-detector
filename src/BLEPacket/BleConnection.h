@@ -1,4 +1,5 @@
-#pragma once
+#ifndef BLE_CONNECTION_H
+#define BLE_CONNECTION_H
 
 #include <cstdint>
 #include <functional>
@@ -126,3 +127,5 @@ private:
     uint64_t last_seen_time = 0;
     gatt_client_notification_t notification_listener{};
 };
+
+#endif

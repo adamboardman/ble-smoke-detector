@@ -10,6 +10,7 @@ typedef struct {
     uint8_t id[PICO_UNIQUE_BOARD_ID_SIZE_BYTES];
 } pico_unique_board_id_t;
 
+void pico_set_unique_board_id(const uint64_t new_id);
 void pico_get_unique_board_id(pico_unique_board_id_t *id_out);
 
 extern int lastAddress;
@@ -45,5 +46,6 @@ void reset_sent_for_test();
 
 extern std::vector<uint8_t> mock_sent_data;
 
+void reset_preferences_for_test();
 
 #endif // PICO_PI_MOCKS_H

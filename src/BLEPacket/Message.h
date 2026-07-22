@@ -1,4 +1,5 @@
-#pragma once
+#ifndef MESSAGE_H
+#define MESSAGE_H
 
 #include <cstdint>
 #include <string>
@@ -45,6 +46,12 @@ public:
 
     void writePacketPayload(BinaryWriter &writer) override;
 
+    void setLatitudeI(int32_t value);
+
+    void setLongitudeI(int32_t value);
+
+    void setAltitude(int32_t value);
+
 private:
     std::string message_id{};
     std::string sender_nickname{};
@@ -53,4 +60,9 @@ private:
     uint8_t message_flags = 0;
     Peer *sender_peer;
     std::string channel{};
+    int32_t latitude_i = 0;
+    int32_t longitude_i = 0;
+    int32_t altitude = 0;
 };
+
+#endif

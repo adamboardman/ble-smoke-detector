@@ -1,4 +1,5 @@
-#pragma once
+#ifndef BINARY_READER_H
+#define BINARY_READER_H
 
 #include <cstdint>
 #include "ble_types.h"
@@ -12,6 +13,8 @@ public:
     uint8_t read_uint8();
 
     uint16_t read_uint16();
+
+    int32_t read_int32();
 
     uint32_t read_uint32();
 
@@ -35,3 +38,5 @@ private:
     const uint16_t buffer_size;
     uint16_t pos;
 };
+
+#endif

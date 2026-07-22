@@ -1,4 +1,5 @@
-#pragma once
+#ifndef BLE_CONNECTION_TRACKER_H
+#define BLE_CONNECTION_TRACKER_H
 
 #include <map>
 #include <memory>
@@ -8,6 +9,7 @@
 #include "Message.h"
 #include "Peer.h"
 #include "Announce.h"
+#include "MicroMeshPreferences.h"
 
 inline uint64_t build_time_ms = 1781273465ll * 1000; //Occasionally update this, ms since 1970
 inline auto one_second_in_us = 1000 * 1000 * 1;
@@ -22,6 +24,8 @@ inline auto ten_minutes_in_us = 1000 * 1000 * 60 * 10;
 inline auto ten_minutes_in_ms = 1000 * 60 * 10;
 inline auto one_hour_in_ms = 1000 * 60 * 60;
 inline auto twenty_four_hours_in_ms = 1000 * 60 * 60 * 24;
+
+extern void savePreferencesToFlash(MicroMeshPreferences &prefs);
 
 class BleConnectionTracker {
 public:
@@ -75,6 +79,12 @@ public:
 
     bool havePacketsToSend();
 
+    uint64_t getMySenderId();
+
+    MicroMeshPreferences &getPreferences();
+
+    void updatePreferences(const MicroMeshPreferences &preferences, bool save=false);
+
     static uint32_t bitchat_sender_id_to_meshtastic_id(uint64_t sender_id);
 
     static void bitchat_sender_id_to_meshtastic_macaddr(uint64_t sender_id, uint8_t *macaddr);
@@ -86,6 +96,12 @@ public:
     [[nodiscard]] uint64_t getTimeMs() const;
 
     void setConnectionStarted(const BleConnection *neighbour);
+
+    void setupAnnounceIfNeeded();
+
+    void announceToConnections();
+
+    [[nodiscard]] size_t getSizeOfTargetedPacketsToSend() const;
 
     Announce *getAnyAnnounce();
 
@@ -114,6 +130,10 @@ private:
     std::map<std::string, Message> messages{};
     //Store of announcements
     std::map<std::size_t, Announce> announces{};
+    //Store of self announcing data
+    Announce announce{};
+    //Store of preferences
+    MicroMeshPreferences prefs{};
     //Store of active and disconnected connections
     std::map<hci_con_handle_t, BleConnection> connections{};
     //Store of potential connections
@@ -128,6 +148,9 @@ private:
     std::multimap<Base *, BleConnection *> packets_connections_sent_list{};
     std::multimap<Base *, Peer *> packets_peers_sent_list{};
     std::vector<Base *> broadcast_packets_to_send_list{};
+    std::multimap<Base *, BleConnection *> targeted_packets_to_send_list{};
 };
 
 extern BleConnectionTracker *connection_tracker_ptr;
+
+#endif

@@ -1,16 +1,13 @@
 #include "BleConnection.h"
 
 #include <cstring>
+#include "Debugging.h"
 
 #ifdef MOCK_PICO_PI
-#include "Debugging.h"
 #include "../test/packet_repeater_mocks.h"
 #include "../test/pico_pi_mocks.h"
-#else
-#ifdef PICO_BOARD
-#include "Debugging.h"
+#elifdef PICO_BOARD
 #include "hardware/timer.h"
-#endif
 #endif
 
 void BleConnection::setConnectionHandle(const uint16_t hci_con_handle) {

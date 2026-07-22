@@ -7,18 +7,13 @@
 #include <Arduino.h>
 #include <cstdint>
 #include <vector>
+#ifdef Arduino_h
 #include <nimble/ble.h>
+#endif
 #include <NimBLEDevice.h>
 #include <time.h>
 
-#define ASSERT_DEBUG(...)
-#define LOG_DEBUG(...) Serial.printf(__VA_ARGS__)
-#define LOG_INFO(...) Serial.printf(__VA_ARGS__)
-#define LOG_WARN(...)
-#define LOG_ERROR(...)
-#define LOG_CRIT(...)
-#define LOG_TRACE(...)
-
+#ifndef ARDUINO_ARCH_ESP32
 enum {
     PICO_OK = 0,
     PICO_ERROR_NONE = 0,
@@ -26,6 +21,7 @@ enum {
     PICO_ERROR_GENERIC = -2,
     PICO_ERROR_NO_DATA = -3,
 };
+#endif
 
 typedef struct {
     uint16_t start_group_handle;

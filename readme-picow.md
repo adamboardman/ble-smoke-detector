@@ -19,11 +19,20 @@ See also readme-xiao-esp32c3.md for details about using that device with the Ard
 
 Note: This variant uses btstack, cmake and compiles main.cpp.
 
+Preferences Storage
+===================
+
+You can configure the smoke detector to report its location on each message to aid in finding out where it is.
+
+You need to run the 'ble-store-preferences' program first on your device to store your local settings that will then persist.
+Alternatively you can use a modified app with the 'deploy preferences' feature to set them at detector installation
+via a BLE Packet(type_micro_mesh_preferences).
+
 Building
 ========
 
 The Pico_w is perfectly sufficient, and as the cheaper device it would seem more likely to be used embedded with the 
-insides of a smoke detector.
+insides of a smoke detector. Though the lack of coded phy for longer range and the on-pcb aerial count against it.
 
 Command Line
 ------------

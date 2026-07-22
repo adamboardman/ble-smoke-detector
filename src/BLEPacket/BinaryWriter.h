@@ -1,4 +1,5 @@
-#pragma once
+#ifndef BINARY_WRITER_H
+#define BINARY_WRITER_H
 
 #include <cstdint>
 #include <vector>
@@ -15,6 +16,8 @@ public:
     void write_uint16(uint16_t value) const;
 
     void write_uint32(uint32_t value) const;
+
+    void write_int32(uint32_t value) const;
 
     void write_uint64(uint64_t value) const;
 
@@ -39,3 +42,5 @@ public:
 private:
     std::vector<uint8_t> &vector;
 };
+
+#endif

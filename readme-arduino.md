@@ -24,6 +24,15 @@ Arduino SDK
 This variant compiles ble-smoke-detector.ino and some of the files from src/
 It ignores the rest of the files in the project root. The needed modules should be installed via the Arduino IDE.
 
+Preferences Storage
+===================
+
+You can configure the smoke detector to report its location on each message to aid in finding out where it is.
+
+You need to run the 'ble-store-preferences' program first on your device to store your local settings that will then persist.
+Alternatively you can use a modified app with the 'deploy preferences' feature to set them at detector installation
+via a BLE Packet(type_micro_mesh_preferences).
+
 Building
 ========
 
@@ -40,4 +49,10 @@ Device Support
 You need an Arduino device that supports BLE.
 
 Tested so far:
- * XIAO ESP32C3
+ * XIAO ESP32C3 - comes with an external aerial that gives a good range.
+
+Device Sleeps - Difficult to flash
+==================================
+
+If you are having trouble getting to flash updates to a smoke detector you can avoid its going to sleep by putting a jumper wire between GND and D10.
+This will give you five minutes of uptime for each reboot.

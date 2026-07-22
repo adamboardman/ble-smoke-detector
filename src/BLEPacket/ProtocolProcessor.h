@@ -1,5 +1,5 @@
-#pragma once
-
+#ifndef PROTOCOL_PROCESSOR_H
+#define PROTOCOL_PROCESSOR_H
 #include <vector>
 
 #include "Base.h"
@@ -22,3 +22,5 @@ public:
 private:
     BleConnectionTracker &ble_connection_tracker;
 };
+
+#endif

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef INT_TYPES_H
+#define INT_TYPES_H
 
 #include <cstdint>
 
@@ -43,7 +44,13 @@ typedef uint32_t TickType_t;
 // #define portMAX_DELAY UINT32_MAX
 
 #ifdef PICO_BOARD
-inline auto millis() {
+inline unsigned long millis() {
     return time_us_64()/1000;
 }
+
+inline unsigned long micros() {
+    return time_us_64();
+}
+#endif
+
 #endif

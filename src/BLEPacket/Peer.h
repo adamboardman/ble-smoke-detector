@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PEER_H
+#define PEER_H
 
 #include <cstdint>
 #include <string>
@@ -42,3 +43,4 @@ private:
     uint16_t connection_handle{};
 };
 
+#endif

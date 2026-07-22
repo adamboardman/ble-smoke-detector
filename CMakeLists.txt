@@ -20,7 +20,8 @@ set(CMAKE_CXX_STANDARD 23)
 
 add_definitions(-DPICO_ENTER_USB_BOOT_ON_EXIT)
 add_definitions(-DCYW43_PIO_CLOCK_DIV_DYNAMIC=1)
-add_definitions(-DPICO_CYW43_ARCH_DEFAULT_COUNTRY_CODE=CYW43_COUNTRY_UK)
+#TODO - update this to your own country
+add_definitions(-DPICO_CYW43_ARCH_DEFAULT_COUNTRY_CODE=CYW43_COUNTRY_WORLDWIDE)
 
 pico_sdk_init()
 
@@ -32,6 +33,7 @@ add_executable(ble_smoke_detector main.cpp
         src/BLEPacket/Base.cpp
         src/BLEPacket/Announce.cpp
         src/BLEPacket/Message.cpp
+        src/BLEPacket/MicroMeshPreferences.cpp
         src/BLEPacket/ProtocolProcessor.cpp
         src/BLEPacket/BinaryReader.cpp
         src/BLEPacket/BinaryWriter.cpp

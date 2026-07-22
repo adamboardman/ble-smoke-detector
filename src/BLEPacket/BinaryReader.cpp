@@ -22,6 +22,19 @@ uint16_t BinaryReader::read_uint16() {
     return ret;
 }
 
+int32_t BinaryReader::read_int32() {
+    if (pos + 4 > buffer_size) {
+        pos += 4;
+        return 0;
+    }
+    const uint32_t ret = static_cast<uint64_t>(buffer[pos]) << 24 |
+                         static_cast<uint64_t>(buffer[pos + 1]) << 16 |
+                         static_cast<uint64_t>(buffer[pos + 2]) << 8 |
+                         static_cast<uint64_t>(buffer[pos + 3]);
+    pos += 4;
+    return ret;
+}
+
 uint32_t BinaryReader::read_uint32() {
     if (pos + 4 > buffer_size) {
         pos += 4;

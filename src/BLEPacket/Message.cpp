@@ -2,10 +2,6 @@
 
 #include "Debugging.h"
 
-#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
-extern void print_named_data(const char *name, const uint8_t *data, uint16_t data_size);
-#endif
-
 Message::Message() : Base(type_message), sender_peer(nullptr) {
 }
 
@@ -31,6 +27,27 @@ Message::Message(const uint8_t version, BinaryReader &reader)
         } else if (data_type == tlv_message_reply_to_id) {
             if (data_length == sizeof(uint32_t)) {
                 reply_id = reader.read_uint32();
+            } else {
+                setMalformed(true);
+            }
+        } else if (data_type == tlv_message_location_latitude) {
+            if (data_length == sizeof(int32_t)) {
+                latitude_i = reader.read_int32();
+                LOG_DEBUG("latitude_i: %d\n", latitude_i);
+            } else {
+                setMalformed(true);
+            }
+        } else if (data_type == tlv_message_location_longitude) {
+            if (data_length == sizeof(int32_t)) {
+                longitude_i = reader.read_int32();
+                LOG_DEBUG("longitude_i: %d\n", longitude_i);
+            } else {
+                setMalformed(true);
+            }
+        } else if (data_type == tlv_message_location_altitude) {
+            if (data_length == sizeof(int32_t)) {
+                altitude = reader.read_int32();
+                LOG_DEBUG("altitude: %d\n", altitude);
             } else {
                 setMalformed(true);
             }
@@ -130,6 +147,9 @@ uint32_t Message::getPayloadLength() {
     }
     if (message_flags > 0) len += variableLength(tlv_message_flags, sizeof(uint8_t));
     if (reply_id > 0) len += variableLength(tlv_message_reply_to_id, sizeof(uint32_t));
+    if (latitude_i != 0) len += variableLength(tlv_message_location_latitude, sizeof(uint32_t));
+    if (longitude_i != 0) len += variableLength(tlv_message_location_longitude, sizeof(uint32_t));
+    if (altitude != 0) len += variableLength(tlv_message_location_altitude, sizeof(uint32_t));
     setPayloadLength(len);
     return len;
 }
@@ -153,4 +173,19 @@ void Message::writePacketPayload(BinaryWriter &writer) {
     if (reply_id > 0) {
         writeVariable(writer, tlv_message_reply_to_id, reply_id);
     }
+    if (latitude_i != 0) writeVariable(writer, tlv_message_location_latitude, latitude_i);
+    if (longitude_i != 0) writeVariable(writer, tlv_message_location_longitude, longitude_i);
+    if (altitude != 0) writeVariable(writer, tlv_message_location_altitude, altitude);
+}
+
+void Message::setLatitudeI(const int32_t value) {
+    latitude_i = value;
+}
+
+void Message::setLongitudeI(const int32_t value) {
+    longitude_i = value;
+}
+
+void Message::setAltitude(const int32_t value) {
+    altitude = value;
 }

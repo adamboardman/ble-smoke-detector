@@ -1,4 +1,5 @@
-#pragma once
+#ifndef BASE_H
+#define BASE_H
 
 #include <cstdint>
 #include <string>
@@ -89,6 +90,8 @@ public:
 
     void writeVariable(const BinaryWriter &writer, uint8_t type, uint32_t value);
 
+    void writeVariable(const BinaryWriter &writer, uint8_t type, int32_t value);
+
     void writeVariable(const BinaryWriter &writer, uint8_t type, uint8_t value);
 
     virtual void writePacketPayload(BinaryWriter &writer);
@@ -110,3 +113,5 @@ private:
     std::vector<uint64_t> routeList{};
     std::string signature{};
 };
+
+#endif

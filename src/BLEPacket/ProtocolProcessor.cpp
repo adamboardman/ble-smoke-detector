@@ -1,7 +1,4 @@
-#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
 #include "Debugging.h"
-#endif
-
 #include "int_types.h"
 
 #include "ProtocolProcessor.h"
@@ -17,16 +14,14 @@
 #include "Announce.h"
 #include "Message.h"
 
-#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
-extern void print_named_data(const char *name, const uint8_t *data, uint16_t data_size);
-#endif
-
 const char *ProtocolProcessor::stringForType(const uint8_t type) {
     switch (type) {
         case type_announce:
             return "Announce";
         case type_message:
             return "Message";
+        case type_micro_mesh_preferences:
+            return "MicroMesh Preferences";
         default:
             return "UnknownType";
     }
@@ -59,7 +54,7 @@ void ProtocolProcessor::processWrite(BleConnection *connection, const uint16_t o
             updateOrStorePeerNameFromAnnouncement(announce, connection);
             ble_connection_tracker.possiblyUpdateTimeOffset(announce.getPacketTimestamp());
             if (const auto stored_announce = ble_connection_tracker.storeAnnounceAndReturnIfNew(announce)) {
-                if (const auto newTtl = stored_announce->getPacketTtl()-1; newTtl > 0) {
+                if (const auto newTtl = stored_announce->getPacketTtl() - 1; newTtl > 0) {
                     stored_announce->setPacketTtl(newTtl);
                     auto peer = ble_connection_tracker.checkSenderInPeers(stored_announce->getPacketSenderId());
                     ble_connection_tracker.enqueueBroadcastPacket(stored_announce, connection, peer);
@@ -78,7 +73,12 @@ void ProtocolProcessor::processWrite(BleConnection *connection, const uint16_t o
             }
             break;
         }
-        default:
+        case type_micro_mesh_preferences: {
+            MicroMeshPreferences preferences(version, reader);
+            ble_connection_tracker.updatePreferences(preferences, true);
+        }
+        default: {
             break;
+        }
     }
 }

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PACKET_TYPES_H
+#define PACKET_TYPES_H
 
 enum PacketType {
     type_unknown = 0,
@@ -13,6 +14,7 @@ enum PacketType {
     type_bitchat_file_transfer = 0x22, // File transfer packet (BLE voice notes, etc.)
 
     // bump up values to avoid clash with upstream bitchat - if they adopt compatible concepts then we can migrate and use their types
+    type_micro_mesh_preferences = 0x7d,
     type_meshtastic_encrypted = 0x7e,
     type_meshtastic = 0x7f
 };
@@ -33,8 +35,15 @@ enum AnnounceTLVType {
     tlv_announce_noise_public_key = 0x02,
     tlv_announce_signing_public_key = 0x03,
     tlv_announce_direct_neighbors = 0x04,
-    tlv_announce_capabilities = 0x05,
-    tlv_announce_bridgeGeohash = 0x06
+    tlv_announce_capabilities = 0x05, //we ignore this so far
+    tlv_announce_bridge_geohash = 0x06, //we ignore this so far
+
+    // bump up values to avoid clash with upstream bitchat - if they adopt compatible concepts then we can migrate and use their types
+    // >> Location - announces will usually not include a location, but might occasionally want to
+    tlv_announce_location_latitude = 0x7d, // 32bit lat*10000000
+    tlv_announce_location_longitude = 0x7e, // 32bit lon*10000000
+    tlv_announce_location_altitude = 0x7f, // height above sea level in meters
+    // << Location
 };
 
 enum MessageTLVType {
@@ -42,8 +51,13 @@ enum MessageTLVType {
     tlv_message_content = 0x01,
 
     // bump up values to avoid clash with upstream bitchat - if they adopt compatible concepts then we can migrate and use their types
-    tlv_message_flags = 0x7b,
-    tlv_message_reply_to_id = 0x7c,
+    // >> Location - messages will usually not include a location, but might occasionally want to
+    tlv_message_location_latitude = 0x78, // 32bit lat*10000000
+    tlv_message_location_longitude = 0x79, // 32bit lon*10000000
+    tlv_message_location_altitude = 0x7a, // height above sea level in meters
+    // << Location
+    tlv_message_flags = 0x7b, // using flags for emoji support in meshtastic messages
+    tlv_message_reply_to_id = 0x7c, // indicates that the message is a reply to a former message
     tlv_message_sender_nickname = 0x7d, // it's useful for a channel to have direct access to the name associated with the message
     tlv_message_channel_content = 0x7e, // to avoid regular bitchat clients showing our channel messages to everyone we omit the regular content
     tlv_message_channel = 0x7f // the #channel name
@@ -76,3 +90,14 @@ enum SyncTypeFlags {
     flag_sync_meshtastic_encrypted = 1<<30,
     flag_sync_meshtastic = 1<<31
 };
+
+enum MicroMeshPreferencesTLVType {
+    tlv_micro_mesh_preferences_key = 0x01,
+    tlv_micro_mesh_preferences_ssid = 0x02,
+    tlv_micro_mesh_preferences_password = 0x03,
+    tlv_micro_mesh_preferences_latitude = 0x04,
+    tlv_micro_mesh_preferences_longitude = 0x05,
+    tlv_micro_mesh_preferences_altitude = 0x06
+};
+
+#endif

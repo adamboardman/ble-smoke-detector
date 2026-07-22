@@ -6,6 +6,7 @@
 #include "pico_pi_mocks.h"
 
 #include "BinaryWriter.h"
+#include "MicroMeshPreferences.h"
 
 class BleConnectionTracker;
 BleConnectionTracker *connection_tracker_ptr=nullptr;
@@ -104,21 +105,22 @@ void reset_sent_for_test() {
     mock_sent_data.clear();
 }
 
-void print_named_data(const char *name, const uint8_t *data, const uint16_t data_size) {
-    LOG_DEBUG("%s:", name);
-    for (int i = 0; i < data_size; i++) {
-        LOG_DEBUG("%02x", data[i]);
-    }
-    LOG_DEBUG("\n");
-    LOG_DEBUG("%s[c]:", name);
-    for (int i = 0; i < data_size; i++) {
-        if (data[i] >= 0x20 && data[i] < 0x7e) {
-            LOG_DEBUG("%c", data[i]);
-        } else {
-            LOG_DEBUG(" ");
-        }
-    }
-    LOG_DEBUG("\n");
+static MicroMeshPreferences preferences;
+static bool saved = false;
+
+void reset_preferences_for_test() {
+    preferences.setKey("real-key");
+    preferences.setSsid("");
+    preferences.setPassword("");
+    preferences.setLatitudeI(0);
+    preferences.setLongitudeI(0);
+    preferences.setAltitude(0);
+    saved = false;
+}
+
+void savePreferencesToFlash(MicroMeshPreferences &prefs) {
+    preferences = prefs;
+    saved = true;
 }
 
 void populate_array_from_string(uint8_t *uint_array, const std::string &str) {
@@ -150,7 +152,14 @@ void populate_string_from_string(std::string *str_out, const std::string &str) {
     }
 }
 
+uint64_t board_id{};
+
+void pico_set_unique_board_id(const uint64_t new_id) {
+    board_id = new_id;
+}
+
 void pico_get_unique_board_id(pico_unique_board_id_t *id_out) {
+    memcpy(id_out, &board_id, sizeof(uint64_t));
 }
 
 void gap_local_bd_addr(bd_addr_t address_buffer) {

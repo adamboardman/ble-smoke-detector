@@ -1,12 +1,6 @@
 #include "Announce.h"
-
 #include "int_types.h"
-
-#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
 #include "Debugging.h"
-
-extern void print_named_data(const char *name, const uint8_t *data, uint16_t data_size);
-#endif
 
 Announce::Announce()
     : Base(type_announce) {
@@ -19,11 +13,32 @@ Announce::Announce(const uint8_t version, BinaryReader &reader)
     do {
         const auto data_type = reader.read_uint8();
         const auto data_length = reader.read_uint8();
-        const uint8_t *data = nullptr;
-        if (data_type != tlv_announce_direct_neighbors) {
-            data = reader.read_data(data_length);
-        }
-        if (data) {
+        if (data_type == tlv_announce_location_latitude) {
+            if (data_length == sizeof(int32_t)) {
+                latitude_i = reader.read_int32();
+            } else {
+                setMalformed(true);
+            }
+        } else if (data_type == tlv_announce_location_longitude) {
+            if (data_length == sizeof(int32_t)) {
+                longitude_i = reader.read_int32();
+            } else {
+                setMalformed(true);
+            }
+        } else if (data_type == tlv_announce_location_altitude) {
+            if (data_length == sizeof(int32_t)) {
+                altitude = reader.read_int32();
+            } else {
+                setMalformed(true);
+            }
+        } else if (data_type == tlv_announce_direct_neighbors) {
+            for (int i = 0; i < data_length; i += 8) {
+                auto neighbour = reader.read_uint64();
+                direct_neighbors.push_back(neighbour);
+                LOG_DEBUG("neighbour: %" PRIx64 ", ", neighbour);
+            }
+            LOG_DEBUG("\n");
+        } else if (const uint8_t *data = reader.read_data(data_length)) {
             switch (data_type) {
                 case tlv_announce_nickname:
                     name = std::string(reinterpret_cast<const char *>(data), data_length);
@@ -34,22 +49,12 @@ Announce::Announce(const uint8_t version, BinaryReader &reader)
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
                     print_named_data("noise_public_key", data, data_length);
 #endif
-                    LOG_DEBUG("data_length: %d\n", data_length);
                     break;
                 case tlv_announce_signing_public_key:
                     signing_public_key = std::string(reinterpret_cast<const char *>(data), data_length);
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
                     print_named_data("signing_public_key", data, data_length);
 #endif
-                    LOG_DEBUG("data_length: %d\n", data_length);
-                    break;
-                case tlv_announce_direct_neighbors:
-                    for (int i = 0; i < data_length; i += 8) {
-                        auto neighbour = reader.read_uint64();
-                        direct_neighbors.push_back(neighbour);
-                        LOG_DEBUG("neighbour: %" PRIu64 ", \n", neighbour);
-                    }
-                    LOG_DEBUG("\n");
                     break;
                 default:
                     //ignore unknown future type - data skipped and ignored
@@ -59,7 +64,7 @@ Announce::Announce(const uint8_t version, BinaryReader &reader)
             setMalformed(true);
         }
         remainder = reader.read_remainder_len();
-    } while (remainder > tail - getPayloadLength());
+    } while (!isMalformed() && remainder > tail - Announce::getPayloadLength());
     handleReaderRemainder(reader);
 }
 
@@ -88,9 +93,12 @@ uint32_t Announce::getPayloadLength() {
     uint32_t len = 0;
     if (name.size() > 0) len += variableLength(tlv_announce_nickname, name.size());
     if (noise_public_key.size() > 0) len += variableLength(tlv_announce_noise_public_key, noise_public_key.size());
-    if (signing_public_key.size() > 0) len += variableLength(tlv_announce_signing_public_key,
-                                                             signing_public_key.size());
+    if (signing_public_key.size() > 0)
+        len += variableLength(tlv_announce_signing_public_key, signing_public_key.size());
     if (direct_neighbors.size() > 0) len += variableLength(tlv_announce_direct_neighbors, direct_neighbors.size());
+    if (latitude_i != 0) len += variableLength(tlv_announce_location_latitude, sizeof(uint32_t));
+    if (longitude_i != 0) len += variableLength(tlv_announce_location_longitude, sizeof(uint32_t));
+    if (altitude != 0) len += variableLength(tlv_announce_location_altitude, sizeof(uint32_t));
     setPayloadLength(len);
     return len;
 }
@@ -109,6 +117,9 @@ std::size_t Announce::getAnnounceHash() const {
     writer.write_uint8(getPacketFlags());
     writer.write_uint64(getPacketSenderId());
     writer.write_uint64(getPacketRecipientId());
+    writer.write_int32(latitude_i);
+    writer.write_int32(longitude_i);
+    writer.write_int32(altitude);
     std::string meta_string;
     meta_string.assign(reinterpret_cast<const char *>(meta_buffer.data()), meta_buffer.size());
     return std::hash<std::string>{}(meta_string);
@@ -126,4 +137,19 @@ void Announce::writePacketPayload(BinaryWriter &writer) {
             writer.write_uint64(value);
         }
     }
+    if (latitude_i != 0) writeVariable(writer, tlv_message_location_latitude, latitude_i);
+    if (longitude_i != 0) writeVariable(writer, tlv_message_location_longitude, longitude_i);
+    if (altitude != 0) writeVariable(writer, tlv_message_location_altitude, altitude);
+}
+
+void Announce::setLatitudeI(const int32_t value) {
+    latitude_i = value;
+}
+
+void Announce::setLongitudeI(const int32_t value) {
+    longitude_i = value;
+}
+
+void Announce::setAltitude(const int32_t value) {
+    altitude = value;
 }

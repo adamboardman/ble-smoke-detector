@@ -1,3 +1,6 @@
+//hide the PicoW code from ARDUINO builds
+#ifdef PICO_BOARD
+
 #include <iomanip>
 #include <ranges>
 #include <cstdio>
@@ -8,8 +11,6 @@
 #include "btstack.h"
 #include "hci_dump_embedded_stdout.h"
 #include "pico/cyw43_arch.h"
-#include "pico/btstack_cyw43.h"
-#include "hardware/adc.h"
 #include "pico/stdlib.h"
 #include "pico/float.h"
 #include "hardware/gpio.h"
@@ -17,7 +18,6 @@
 #include "hci.h"
 #include "gap.h"
 #include "pico/unique_id.h"
-#include "BinaryReader.h"
 #include "ProtocolProcessor.h"
 #include "BleConnection.h"
 #include "hardware/sync.h"
@@ -26,9 +26,11 @@
 #include "BinaryWriter.h"
 #include "BleConnectionTracker.h"
 #include "hardware/clocks.h"
-#include "hardware/pll.h"
+#include "hardware/flash.h"
 #include "pico/binary_info/code.h"
 #include "pico/cyw43_driver.h"
+#include "pico/flash.h"
+#include "pico/btstack_flash_bank.h"
 
 const uint EXIT_GPIO_PIN = 28;
 const uint KEEP_ALIVE_PIN = 16;
@@ -48,24 +50,6 @@ const uint LIFE_CHECK_PIN = 18;
 #define BLE_FLAGS_LE_ONLY_GENERAL_DISC_MODE (BLE_FLAG_LE_GENERAL_DISC_MODE | BLE_FLAG_BR_EDR_NOT_SUPPORTED)
 
 #define BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED 0x01 /**< Connectable and scannable undirected advertising events. */
-
-
-void print_named_data(const char *name, const uint8_t *data, const uint16_t data_size) {
-    LOG_DEBUG("%s:", name);
-    for (int i = 0; i < data_size; i++) {
-        LOG_DEBUG("%02x", data[i]);
-    }
-    LOG_DEBUG("\n");
-    LOG_DEBUG("%s[c]:", name);
-    for (int i = 0; i < data_size; i++) {
-        if (data[i] >= 0x20 && data[i] < 0x7e) {
-            LOG_DEBUG("%c", data[i]);
-        } else {
-            LOG_DEBUG(" ");
-        }
-    }
-    LOG_DEBUG("\n");
-}
 
 bool keep_running = true;
 bool fresh_boot = true;
@@ -265,6 +249,7 @@ static void dump_advertisement_data(const uint8_t *advertisement_data, uint8_t a
                           little_endian_read_16(data, 2) * 5 / 4);
                 break;
             case BLUETOOTH_DATA_TYPE_SERVICE_DATA:
+                LOG_DEBUG("ServiceData: ");
                 for (i = 0; i < size; i += 2) {
                     LOG_DEBUG("%02X ", data[i]);
                 }
@@ -433,7 +418,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
     global_activity++;
     // LOG_DEBUG("hci_packet_handler(0x%02x,%d,data,%d)\n", packet_type, channel, size);
 
-    //ProtocolProcessor::print_named_data("hci_packet", packet, size);
+    //print_named_data("hci_packet", packet, size);
 
     if (packet_type != HCI_EVENT_PACKET) return;
 
@@ -557,7 +542,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
         case HCI_EVENT_META_GAP: {
             //0xe7
             // wait for connection complete
-            LOG_DEBUG("HCI_EVENT_META_GAP subevent: 0x%02x\n", hci_event_gap_meta_get_subevent_code(packet));
+            // LOG_DEBUG("HCI_EVENT_META_GAP subevent: 0x%02x\n", hci_event_gap_meta_get_subevent_code(packet));
 
             if (hci_event_gap_meta_get_subevent_code(packet) != GAP_SUBEVENT_LE_CONNECTION_COMPLETE) break;
 
@@ -565,7 +550,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
 
             const auto con_handle = gap_subevent_le_connection_complete_get_connection_handle(packet);
             hci_connection_t *hci_connection = hci_connection_for_handle(con_handle);
-            LOG_DEBUG("HCI_EVENT_META_GAP hci_connection_for_handle(0x%x) - 0x%x\n", con_handle, hci_connection);
+            // LOG_DEBUG("HCI_EVENT_META_GAP hci_connection_for_handle(0x%x) - 0x%x\n", con_handle, hci_connection);
 
             const auto address_type = static_cast<bd_addr_type_t>(
                 gap_subevent_le_connection_complete_get_peer_address_type(packet));
@@ -629,13 +614,13 @@ void att_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
     UNUSED(size);
     UNUSED(channel);
     global_activity++;
-    LOG_DEBUG("att_packet_handler(0x%02x,%d,data,%d)\n", packet_type, channel, size);
+    // LOG_DEBUG("att_packet_handler(0x%02x,%d,data,%d)\n", packet_type, channel, size);
     if (packet_type != HCI_EVENT_PACKET) return;
 
     //print_named_data("att_packet", packet, size);
 
     uint8_t event_type = hci_event_packet_get_type(packet);
-    LOG_DEBUG("event_type: 0x%02x\n", event_type);
+    // LOG_DEBUG("event_type: 0x%02x\n", event_type);
     switch (event_type) {
         case ATT_EVENT_CAN_SEND_NOW: {
             //0xb7
@@ -653,7 +638,7 @@ void att_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             bd_addr_t address;
             const hci_con_handle_t handle = att_event_connected_get_handle(packet);
             hci_connection_t *hci_connection = hci_connection_for_handle(handle);
-            LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
+            // LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
             att_event_connected_get_address(packet, address);
             LOG_DEBUG("Connected on handle 0x%x with %s address %s ...\n", handle,
                       address_type == 0 ? "public" : "random",
@@ -666,7 +651,7 @@ void att_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             //0xb4
             const hci_con_handle_t handle = att_event_disconnected_get_handle(packet);
             hci_connection_t *hci_connection = hci_connection_for_handle(handle);
-            LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
+            // LOG_DEBUG("hci_connection_for_handle(0x%x) - 0x%x\n", handle, hci_connection);
             LOG_DEBUG("Disconnected with handle 0x%x\n", handle);
             connection_tracker.reportDisconnection(handle);
             global_activity++;
@@ -681,13 +666,13 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
     UNUSED(channel);
     UNUSED(size);
     global_activity++;
-    LOG_DEBUG("sm_packet_handler(0x%02x,%d,data,%d)\n", packet_type, channel, size);
+    // LOG_DEBUG("sm_packet_handler(0x%02x,%d,data,%d)\n", packet_type, channel, size);
     if (packet_type != HCI_EVENT_PACKET) return;
 
     //print_named_data("sm_packet", packet, size);
 
     const uint8_t event_packet_type = hci_event_packet_get_type(packet);
-    LOG_DEBUG("event_packet_type: 0x%02x\n", event_packet_type);
+    // LOG_DEBUG("event_packet_type: 0x%02x\n", event_packet_type);
 }
 
 static void stop_scan_handler(struct btstack_timer_source *ts) {
@@ -711,7 +696,7 @@ bool connect_to_first_neighbour() {
             return false;
         }
         const auto err = gap_connect(address, neighbour->getAddressType());
-        LOG_DEBUG("gap_connect: %s, err: 0x%x\n", bd_addr_to_str(address), err);
+        // LOG_DEBUG("gap_connect: %s, err: 0x%x\n", bd_addr_to_str(address), err);
         if (err == 0) {
             connection_tracker.setConnectionStarted(neighbour);
             connection_in_progress = true;
@@ -720,20 +705,6 @@ bool connect_to_first_neighbour() {
         sleep_ms(20);
     }
     return false;
-}
-
-void gpio_callback(const uint gpio, const uint32_t events) {
-    global_activity++;
-    LOG_DEBUG("gpio_callback gpio: %d, events: %d\n", gpio, events);
-    if (gpio == EXIT_GPIO_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
-        keep_running = false;
-    }
-    if (gpio == SMOKE_SEEN_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
-        smoke_seen = true;
-    }
-    if (gpio == LIFE_CHECK_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
-        life_check = true;
-    }
 }
 
 /**
@@ -793,7 +764,7 @@ void generateMessageIfNeeded() {
         const uint64_t minutes = seconds / 60;
         timestamp_ms = minutes * 60 * 1000;
 
-        Message message(7, timestamp_ms, 0, sender, 0);
+        Message message(4, timestamp_ms, 0, sender, 0);
         message.setContent(messageContentString);
         outBuffer.clear();
         buffer.write_uint64(timestamp_ms);
@@ -813,6 +784,11 @@ void generateMessageIfNeeded() {
         message.setMessageId(messageIdString);
         message.setChannel("#smoke");
 
+        auto prefs = connection_tracker.getPreferences();
+        message.setLatitudeI(prefs.getLatitudeI());
+        message.setLongitudeI(prefs.getLongitudeI());
+        message.setAltitude(prefs.getAltitude());
+
         std::vector<uint8_t> name_buffer;
         const BinaryWriter name_writer(name_buffer);
         name_writer.write_data(reinterpret_cast<const uint8_t *>(ble_smoke_detector_service_name),
@@ -828,6 +804,20 @@ void generateMessageIfNeeded() {
             global_activity++;
             fresh_boot = false;
         }
+    }
+}
+
+void gpio_callback(const uint gpio, const uint32_t events) {
+    global_activity++;
+    LOG_DEBUG("gpio_callback gpio: %d, events: %d\n", gpio, events);
+    if (gpio == EXIT_GPIO_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
+        keep_running = false;
+    }
+    if (gpio == SMOKE_SEEN_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
+        smoke_seen = true;
+    }
+    if (gpio == LIFE_CHECK_PIN && (events & GPIO_IRQ_EDGE_FALL)) {
+        life_check = true;
     }
 }
 
@@ -847,6 +837,38 @@ void setup_gpio_callback() {
     gpio_set_irq_enabled_with_callback(EXIT_GPIO_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
     gpio_set_irq_enabled_with_callback(SMOKE_SEEN_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
     gpio_set_irq_enabled_with_callback(LIFE_CHECK_PIN, GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+}
+
+static void call_flash_sector_erase(void *param) {
+    const auto offset = reinterpret_cast<uint32_t>(param);
+    flash_range_erase(offset, FLASH_SECTOR_SIZE);
+}
+
+// This function will be called when it's safe to call flash_range_program
+static void call_flash_page_program(void *param) {
+    const uint32_t offset = static_cast<uintptr_t *>(param)[0];
+    const auto data = reinterpret_cast<const uint8_t *>(static_cast<uintptr_t *>(param)[1]);
+    flash_range_program(offset, data, FLASH_PAGE_SIZE);
+}
+
+// We store preferences just in front of the spot used by btstack
+#define FLASH_TARGET_OFFSET (PICO_FLASH_BANK_STORAGE_OFFSET-FLASH_SECTOR_SIZE)
+
+void savePreferencesToFlash(MicroMeshPreferences &prefs) {
+    std::vector<uint8_t> prefs_data;
+    prefs.writePacket(prefs_data);
+
+    if (prefs_data.size() < FLASH_PAGE_SIZE) {
+        int rc = flash_safe_execute(call_flash_sector_erase, reinterpret_cast<void *>(FLASH_TARGET_OFFSET), UINT32_MAX);
+        LOG_DEBUG("savePreferencesToFlash - erase - rc: %d\n", rc);
+        if (rc == PICO_OK) {
+            uintptr_t params[] = {FLASH_TARGET_OFFSET, reinterpret_cast<uintptr_t>(prefs_data.data())};
+            rc = flash_safe_execute(call_flash_page_program, params, UINT32_MAX);
+            LOG_DEBUG("savePreferencesToFlash - program - rc: %d\n", rc);
+        }
+    } else {
+        LOG_ERROR("Preferences exceeds a page, need to expand storage - coding change\n");
+    }
 }
 
 void setup_keep_alive_pin() {
@@ -992,3 +1014,5 @@ int main() {
         best_effort_wfe_or_timeout(make_timeout_time_ms(100));
     }
 }
+
+#endif

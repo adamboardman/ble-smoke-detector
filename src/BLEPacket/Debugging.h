@@ -1,16 +1,17 @@
-#pragma once
-
-#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
+#ifndef DEBUGGING_H
+#define DEBUGGING_H
 
 #include "CircularBuffer.h"
+#ifdef ARDUINO_ARCH_ESP32
+#include <Arduino.h> //used to define Arduino_h when we are inside Arduino rather than just fake Arduino
+#endif
 
 #define DEBUG_BUILD
 
-extern CircularBuffer<char> serialLogBuffer;
+#ifdef DEBUG_BUILD
+#if defined(PICO_BOARD) || (!defined(Arduino_h) && defined(ARCH_ESP32)) || defined(MOCK_PICO_PI)
 void printAvailableLogging();
-
-#if defined(DEBUG_BUILD)
-#if (PICO_RP2040 || PICO_RP2350)
+extern CircularBuffer<char> serialLogBuffer;
 #define ASSERT_DEBUG(...) assert(__VA_ARGS__);
 #define LOG_DEBUG(...) serialLogBuffer.writeF(__VA_ARGS__);
 #define LOG_INFO(...) serialLogBuffer.writeF(__VA_ARGS__);
@@ -18,6 +19,14 @@ void printAvailableLogging();
 #define LOG_ERROR(...) serialLogBuffer.writeF(__VA_ARGS__);
 #define LOG_CRIT(...) serialLogBuffer.writeF(__VA_ARGS__);
 #define LOG_TRACE(...) serialLogBuffer.writeF(__VA_ARGS__);
+#elifdef Arduino_h
+#define ASSERT_DEBUG(...) assert(__VA_ARGS__)
+#define LOG_DEBUG(...) Serial.printf(__VA_ARGS__)
+#define LOG_INFO(...) Serial.printf(__VA_ARGS__)
+#define LOG_WARN(...) Serial.printf(__VA_ARGS__)
+#define LOG_ERROR(...) Serial.printf(__VA_ARGS__)
+#define LOG_CRIT(...) Serial.printf(__VA_ARGS__)
+#define LOG_TRACE(...) Serial.printf(__VA_ARGS__)
 #else
 #define ASSERT_DEBUG(...) assert(__VA_ARGS__)
 #define LOG_DEBUG(...) printf(__VA_ARGS__)
@@ -36,5 +45,7 @@ void printAvailableLogging();
 #define LOG_CRIT(...)
 #define LOG_TRACE(...)
 #endif
+
+void print_named_data(const char *name, const uint8_t *data, uint16_t data_size);
 
 #endif

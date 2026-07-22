@@ -2,6 +2,8 @@
 #include <NimBLEDevice.h>
 #include <NimBLEAdvertising.h>
 #include <NimBLEAdvertisedDevice.h>
+#include <Preferences.h>
+#include "src/BLEPacket/Debugging.h"
 #include "src/BLEPacket/ble_types.h"
 #include "src/BLEPacket/BleConnection.h"
 #include "src/BLEPacket/BleConnectionTracker.h"
@@ -63,7 +65,7 @@ void generateMessageIfNeeded() {
       buffer.write_uint8('+');
     }
     if (copy_life_check) {
-      std::string still_alive_string = "Still alive";
+      const std::string still_alive_string = "Still alive";
       buffer.write_data(still_alive_string, still_alive_string.size());
       life_check = false;
     }
@@ -82,14 +84,14 @@ void generateMessageIfNeeded() {
     const uint64_t minutes = seconds / 60;
     timestamp_ms = minutes * 60 * 1000;
 
-    Message message(7, timestamp_ms, 0, sender, 0);
+    Message message(3, timestamp_ms, 0, sender, 0);
     message.setContent(messageContentString);
     outBuffer.clear();
     buffer.write_uint64(timestamp_ms);
     if (copy_fresh_boot && copy_smoke_seen && copy_life_check) {
       buffer.write_uint8('*');
     } else if (copy_fresh_boot && copy_smoke_seen) {
-      buffer.write_uint8('§');
+      buffer.write_uint8('=');
     } else if (copy_smoke_seen) {
       buffer.write_uint8('!');
     } else if (copy_life_check) {
@@ -101,6 +103,11 @@ void generateMessageIfNeeded() {
     const std::string messageIdString(reinterpret_cast<const char *>(outBuffer.data()), outBuffer.size());
     message.setMessageId(messageIdString);
     message.setChannel("#smoke");
+
+    auto prefs = connection_tracker.getPreferences();
+    message.setLatitudeI(prefs.getLatitudeI());
+    message.setLongitudeI(prefs.getLongitudeI());
+    message.setAltitude(prefs.getAltitude());
 
     std::vector<uint8_t> name_buffer;
     const BinaryWriter name_writer(name_buffer);
@@ -134,7 +141,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 
     if (advertisedDevice->getSecondaryPhy() > 0) {
       LOG_DEBUG("pPhy: %d, sPhy: %d\n", advertisedDevice->getPrimaryPhy(), advertisedDevice->getSecondaryPhy());
-      if (advertisedDevice->getPrimaryPhy() == BLE_HCI_LE_PHY_CODED  || advertisedDevice->getSecondaryPhy() == BLE_HCI_LE_PHY_CODED) {
+      if (advertisedDevice->getPrimaryPhy() == BLE_HCI_LE_PHY_CODED || advertisedDevice->getSecondaryPhy() == BLE_HCI_LE_PHY_CODED) {
         foundCoded = true;
       }
     }
@@ -289,13 +296,13 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
     std::string str = "Address: ";
     str += connInfo.getAddress().toString();
     if (subValue == 0) {
-      str += " Unsubscribed to ";
+      str += ", unsubscribed to ";
     } else if (subValue == 1) {
-      str += " Subscribed to notifications for ";
+      str += ", subscribed to notifications for ";
     } else if (subValue == 2) {
-      str += " Subscribed to indications for ";
+      str += ", subscribed to indications for ";
     } else if (subValue == 3) {
-      str += " Subscribed to notifications and indications for ";
+      str += ", subscribed to notifications and indications for ";
     }
     str += std::string(pCharacteristic->getUUID());
 
@@ -303,6 +310,24 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
     LOG_DEBUG("Client ID: %d, %s\n", connInfo.getConnHandle(), str.c_str());
   }
 } chrCallbacks;
+
+class AdvertisingCallbacks : public NimBLEExtAdvertisingCallbacks {
+  void onStopped(NimBLEExtAdvertising *pAdv, int reason, uint8_t instId) override {
+    Serial.printf("Advertising instance %u stopped\n", instId);
+    switch (reason) {
+      case 0:
+        Serial.printf("Client connecting\n");
+        NimBLEDevice::startAdvertising(instId);  //restart advertising
+        return;
+      case BLE_HS_ETIMEOUT:
+        Serial.printf("Time expired\n");
+        break;
+      default:
+        break;
+    }
+    global_activity++;
+  }
+} advertisingCallbacks;
 
 void print_wakeup_reason() {
   esp_sleep_wakeup_cause_t wakeup_reason;
@@ -397,8 +422,37 @@ bool connect_to_first_neighbour() {
   return false;
 }
 
+void savePreferencesToFlash(MicroMeshPreferences &prefs)  {
+  Preferences preferences;
+  preferences.begin("micro-mesh", false);
+  preferences.putString("key", prefs.getKey().c_str());
+  preferences.putString("ssid", prefs.getSsid().c_str());
+  preferences.putString("password", prefs.getPassword().c_str());
+  preferences.putInt("latitude_i", prefs.getLatitudeI());
+  preferences.putInt("longitude_i", prefs.getLongitudeI());
+  preferences.putInt("altitude", prefs.getAltitude());
+  preferences.end();
+  Serial.println("Saved updated preferences");
+}
+
 void setup() {
+  setCpuFrequencyMhz(80);
+
+  auto prefs = connection_tracker.getPreferences();
+  Preferences preferences;
+  preferences.begin("micro-mesh", false);
+  prefs.setKey(preferences.getString("key").c_str());
+  prefs.setSsid(preferences.getString("ssid").c_str());
+  prefs.setPassword(preferences.getString("password").c_str());
+  prefs.setLatitudeI(preferences.getInt("latitude_i"));
+  prefs.setLongitudeI(preferences.getInt("longitude_i"));
+  prefs.setAltitude(preferences.getInt("altitude"));
+  preferences.end();
+
   Serial.begin(115200);
+
+  Serial.print("Loaded saved preferences with ssid: ");
+  Serial.println(prefs.getSsid().c_str());
 
   boot_time = time_us_64();
 
@@ -420,8 +474,61 @@ void setup() {
   NimBLEDevice::setMTU(256 + 5);
   auto local_addr = NimBLEDevice::getAddress();
   Serial.printf("Smoke Detector: %s (power: %d)\n", local_addr.toString().c_str(), NimBLEDevice::getPower(NimBLETxPowerType::All));
+
+  pServer = NimBLEDevice::createServer();
+  pServer->setCallbacks(&serverCallbacks);
+
+  NimBLEService *pService = pServer->createService(serviceUUID);
+  NimBLECharacteristic *pCharacteristic = pService->createCharacteristic(charUUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY);
+
+  pCharacteristic->setValue("");
+  pCharacteristic->setCallbacks(&chrCallbacks);
+
+  uint64_t sender = connection_tracker.getMySenderId();
+  std::vector<uint8_t> buffer;
+  const BinaryWriter writer(buffer);
+  writer.write_uint64(sender);
+  std::string serviceData = std::string(reinterpret_cast<const char *>(buffer.data()), buffer.size());
+  print_named_data("Our ServiceData", (const uint8_t *)serviceData.c_str(), serviceData.length());
+
+  NimBLEExtAdvertisement legacyAdv(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_1M);
+  legacyAdv.setConnectable(true);
+  legacyAdv.setScannable(true);
+  legacyAdv.setLegacyAdvertising(true);
+  legacyAdv.setFlags(BLE_HS_ADV_F_DISC_GEN);
+  legacyAdv.setCompleteServices(serviceUUID);
+  legacyAdv.setName(packet_service_name);
+  NimBLEExtAdvertisement legacyAdvResponse(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_1M);
+  legacyAdvResponse.setServiceData(serviceUUID, serviceData);
+
+  NimBLEExtAdvertisement extAdv(BLE_HCI_LE_PHY_CODED, BLE_HCI_LE_PHY_1M);
+  extAdv.setConnectable(true);
+  extAdv.setScannable(false);
+  extAdv.setFlags(BLE_HS_ADV_F_DISC_GEN);
+  extAdv.setCompleteServices(serviceUUID);
+  extAdv.setName(packet_service_name);
+  extAdv.setServiceData(serviceUUID, serviceData);
+
+  NimBLEExtAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+
+  pAdvertising->setCallbacks(&advertisingCallbacks);
+  if (!pAdvertising->setInstanceData(0, legacyAdv)) {
+    Serial.printf("Failed to register advertisement data - legacyAdv\n");
+  }
+  if (!pAdvertising->setInstanceData(1, extAdv)){
+    Serial.printf("Failed to register advertisement data - extAdv\n");
+  }
+  if (!pAdvertising->setScanResponseData(0, legacyAdvResponse)) {
+    Serial.printf("Failed to register advertisement data - legacyAdvResponse\n");
+  }
+  if (pAdvertising->start(0) && pAdvertising->start(1)) {
+    Serial.printf("Started advertising\n");
+  } else {
+    Serial.printf("Failed to start advertising\n");
+  }
 }
 
+uint64_t lastAnnounce = time_us_64();
 uint64_t lastSendPackets = time_us_64();
 uint64_t lastConnection = time_us_64();
 uint64_t lastFlash = -two_seconds_in_us;
@@ -445,10 +552,19 @@ void loop() {
     global_activity++;
   }
 
+  if (!pBLEScan && (loopStart - lastAnnounce) > two_seconds_in_us) {
+    connection_tracker.announceToConnections();
+    lastAnnounce = time_us_64();
+  }
+
   if (!pBLEScan && !connection_in_progress && (loopStart - lastConnection) > three_seconds_in_us) {
     const auto connecting = connect_to_first_neighbour();
 
     lastConnection = time_us_64();
+    if (connecting) {
+      //stop us giving an announcement directly after connection as it will probably be missed
+      lastAnnounce = time_us_64();
+    }
     // stop sending from happening immediately
     lastSendPackets = time_us_64();
   }

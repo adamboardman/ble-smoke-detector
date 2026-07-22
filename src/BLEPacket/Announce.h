@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ANNOUNCE_H
+#define ANNOUNCE_H
 
 #include "Base.h"
 
@@ -24,9 +25,20 @@ public:
 
     void writePacketPayload(BinaryWriter &writer) override;
 
+    void setLatitudeI(int32_t value);
+
+    void setLongitudeI(int32_t value);
+
+    void setAltitude(int32_t value);
+
 private:
     std::string name{};
     std::string noise_public_key{};
     std::string signing_public_key{};
     std::vector<uint64_t> direct_neighbors{};
+    int32_t latitude_i = 0;
+    int32_t longitude_i = 0;
+    int32_t altitude = 0;
 };
+
+#endif

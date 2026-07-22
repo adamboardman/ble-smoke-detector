@@ -7,10 +7,7 @@
 #include "assert.h"
 #include "BinaryWriter.h"
 #include "int_types.h"
-
-#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
 #include "Debugging.h"
-#endif
 
 constexpr uint16_t SIGNATURE_LENGTH = 64;
 
@@ -68,7 +65,7 @@ Base::Base(const uint8_t type, const uint8_t version, BinaryReader &reader)
 }
 
 void Base::handleReaderRemainder(BinaryReader &reader) {
-    if (hasSignature()) {
+    if (!isMalformed() && hasSignature()) {
         if (const auto sig_data = reader.read_data(SIGNATURE_LENGTH)) {
             signature = std::string(reinterpret_cast<const char *>(sig_data), SIGNATURE_LENGTH);
         } else {
@@ -231,6 +228,12 @@ void Base::writeVariable(const BinaryWriter &writer, uint8_t type, const uint32_
     writer.write_uint8(type);
     writer.write_uint8(sizeof(value));
     writer.write_uint32(value);
+}
+
+void Base::writeVariable(const BinaryWriter &writer, uint8_t type, const int32_t value) {
+    writer.write_uint8(type);
+    writer.write_uint8(sizeof(value));
+    writer.write_int32(value);
 }
 
 void Base::writeVariable(const BinaryWriter &writer, uint8_t type, const uint8_t value) {

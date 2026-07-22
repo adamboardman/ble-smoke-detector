@@ -9,21 +9,20 @@
 #include "int_types.h"
 #include "Announce.h"
 #include "BinaryWriter.h"
+#include "Debugging.h"
 
 #ifdef MOCK_PICO_PI
-#include "Debugging.h"
 #include "../test/packet_repeater_mocks.h"
 #include "../test/pico_pi_mocks.h"
-#else
+#endif
+
 #ifdef PICO_BOARD
-#include "Debugging.h"
 #include "pico/time.h"
 #include "hardware/timer.h"
 #include "ble/att_server.h"
 #include "pico/unique_id.h"
 #else
 #include "ble_types.h"
-#endif
 #endif
 
 extern BleConnectionTracker *connection_tracker_ptr;
@@ -79,10 +78,9 @@ Announce *BleConnectionTracker::storeAnnounceAndReturnIfNew(const Announce &ann)
     }
     if (!found || found->getPacketTimestamp() < ann.getPacketTimestamp()) {
         announces[id] = ann;
-        if (found && found->getName() != ann.getName()) {
-
+        if (!found || found->getName() != ann.getName()) {
+            return &announces[id];
         }
-        return &announces[id];
     }
     return nullptr;
 }
@@ -106,6 +104,24 @@ Peer *BleConnectionTracker::checkSenderInPeers(const uint64_t sender) {
         peers[sender].setId(sender);
     }
     return &peers[sender];
+}
+
+void BleConnectionTracker::enqueueTargetedPacket(Base *packet, BleConnection *to_connection) {
+    if (packet->getPacketTtl() > 0) {
+        auto con = connectionForConnHandle(to_connection->getConnectionHandle());
+        LOG_DEBUG("enqueueTargetedPacket(0x%2p)->(0x%x:0x%2p) as (0x%2p)\n", packet,
+                  to_connection->getConnectionHandle(), to_connection, con);
+        bool found = false;
+        auto [fst, snd] = targeted_packets_to_send_list.equal_range(packet);
+        for (auto i = fst; i != snd; ++i) {
+            if (i->second == con) {
+                found = true;
+            }
+        }
+        if (!found) {
+            targeted_packets_to_send_list.emplace(packet, con);
+        }
+    }
 }
 
 void BleConnectionTracker::enqueueBroadcastPacket(Base *packet) {
@@ -217,15 +233,13 @@ void BleConnectionTracker::reportDisconnection(const uint16_t handle) {
         const Announce *packetAsAnnounce = nullptr;
         if (packet->getPacketType() == type_announce) {
             packetAsAnnounce = static_cast<Announce *>(packet);
-            //LOG_DEBUG("disconnection - checking 0x%" PRIx64 ", 0x%" PRIx64 ", %d, %d\n",
-            //          packetAsAnnounce->getPacketSenderId(), announce.getPacketSenderId(),
-            //          connection->getConnectionHandle(), handle);
         }
-        return packetAsAnnounce != nullptr &&
+        return packetAsAnnounce != nullptr && packetAsAnnounce->getPacketSenderId() == announce.getPacketSenderId() &&
                connection->getConnectionHandle() == handle;
     };
     const auto handle_peers_removed = handle_peer_map.erase(handle);
     const auto announce_p_c_removed = std::erase_if(packets_connections_sent_list, announced_to_connection);
+    const auto announce_p_t_s_removed = std::erase_if(targeted_packets_to_send_list, announced_to_connection);
     auto announced_to_peer = [this, removed_peer](const auto &item) {
         const auto &[packet, peer] = item;
 
@@ -234,12 +248,12 @@ void BleConnectionTracker::reportDisconnection(const uint16_t handle) {
             packetAsAnnounce = static_cast<Announce *>(packet);
         }
 
-        return packetAsAnnounce != nullptr &&
+        return packetAsAnnounce != nullptr && packetAsAnnounce->getPacketSenderId() == announce.getPacketSenderId() &&
                peer == &removed_peer;
     };
     const auto announce_p_s_removed = std::erase_if(packets_peers_sent_list, announced_to_peer);
-    LOG_DEBUG("disconnection - removed announce packets: (%lu, %lu), handle_peers_removed: %lu\n",
-              announce_p_c_removed, announce_p_s_removed, handle_peers_removed);
+    LOG_DEBUG("disconnection - removed announce packets: (%lu, %lu, %lu), handle_peers_removed: %lu\n",
+              announce_p_c_removed, announce_p_t_s_removed, announce_p_s_removed, handle_peers_removed);
 }
 
 bool BleConnectionTracker::weHaveTheTime() const {
@@ -248,7 +262,6 @@ bool BleConnectionTracker::weHaveTheTime() const {
 
 std::vector<BleConnection *> BleConnectionTracker::getConnectableNeighbours() {
     std::vector<BleConnection *> neighbours;
-    const auto now = time_us_64();
     for (auto &connection: available_neighbours | std::views::values) {
         if ((weHaveTheTime() || connection.isRepeater()) && connection.isConnected() == false && !
             connection.isRandom() && connection.getFailReason() == 0) {
@@ -263,8 +276,8 @@ bool BleConnectionTracker::requestNextRssi(const bool restart) {
     if (iterator == connections.end() || restart) {
         iterator = connections.begin();
     }
-    auto [handle, connection] = *iterator;
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
+    auto [handle, connection] = *iterator;
     gap_read_rssi(handle); //requested and will call back
 #endif
     ++iterator;
@@ -318,39 +331,36 @@ void BleConnectionTracker::printStats() {
 
     int active_connections_count = getActiveConnectionCount(true);
     LOG_DEBUG(
-        "con: %d/%zu, avail: %zu, announces:%zu, messages:%zu, broadcast: %zu\n",
+        "con: %d/%zu, avail: %zu, announces:%zu, messages:%zu, broadcast: %zu, targeted: %zu\n",
         active_connections_count, connections.size(), available_neighbours.size(), announces.size(), messages.size(),
-        broadcast_packets_to_send_list.size());
+        broadcast_packets_to_send_list.size(), targeted_packets_to_send_list.size());
 }
-
-#pragma GCC push_options
-#pragma GCC optimize ("O0")
 
 bool BleConnectionTracker::SendPacketToConnection(Base *packet, BleConnection *ble_connection) {
     std::vector<uint8_t> packet_data;
     packet->writePacket(packet_data);
 
     if (ble_connection->getMtu() && packet_data.size() > ble_connection->getMtu()) {
-        LOG_DEBUG("SendPacketToConnection packet to big %lu, %d", packet_data.size(), ble_connection->getMtu());
+        LOG_DEBUG("SendPacketToConnection packet to big %lu, %d\n", packet_data.size(), ble_connection->getMtu());
         //TODO - implement fragment creation
         return false;
     }
 
     const uint16_t con_handle = ble_connection->getConnectionHandle();
     std::string peer_string{};
-    uint64_t sender_id = 0;
     const auto peer = peerWithConnectionHandle(con_handle);
     if (peer && !peer->getName().empty()) {
         peer_string.append(peer->getName());
     }
+    uint64_t peer_id = 0;
     if (peer) {
-        sender_id = peer->getId();
+        peer_id = peer->getId();
     }
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
     hci_connection_t *hci_connection = hci_connection_for_handle(con_handle);
 
     LOG_DEBUG("SendPacketToConnection - type(%d), peer(%s:0x%" PRIx64 "), hci_connection_for_handle(0x%x), hc(0x%p)\n",
-              packet->getPacketType(), peer_string.c_str(), sender_id,
+              packet->getPacketType(), peer_string.c_str(), peer_id,
               con_handle, hci_connection);
     uint8_t status = 0;
     ble_connection->setHasData(true);
@@ -372,8 +382,7 @@ bool BleConnectionTracker::SendPacketToConnection(Base *packet, BleConnection *b
     }
     sleep_ms(20);
     return true;
-#elifdef Arduino_h
-
+#elifdef ARDUINO_ARCH_ESP32
     NimBLERemoteService *pSvc = nullptr;
     NimBLERemoteCharacteristic *pChr = nullptr;
 
@@ -410,11 +419,53 @@ bool BleConnectionTracker::SendPacketToConnection(Base *packet, BleConnection *b
     LOG_DEBUG("SendPacketToConnection - Write without response failedtype(%d), con_handle(0x%x)\n",
               packet->getPacketType(), con_handle);
     return false;
+#else
+#error "No ability to send - unsupported architecture"
+    return false;
 #endif
 }
 
 bool BleConnectionTracker::havePacketsToSend() {
-    return (!broadcast_packets_to_send_list.empty());
+    return (!(broadcast_packets_to_send_list.empty() && targeted_packets_to_send_list.empty()));
+}
+
+uint64_t BleConnectionTracker::getMySenderId() {
+#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
+    pico_unique_board_id_t local_addr;
+    pico_get_unique_board_id(&local_addr);
+    uint64_t sender{};
+    memcpy(&sender, &local_addr, sizeof(uint64_t));
+#elifdef ARDUINO_ARCH_ESP32
+    auto local_addr = NimBLEDevice::getAddress().reverseByteOrder(); //NimBLE stores addresses in reverse to most others
+    uint64_t sender = local_addr;
+#else
+#error "Architecture unsupported"
+    uint64_t sender{};
+#endif
+    return sender;
+}
+
+MicroMeshPreferences &BleConnectionTracker::getPreferences() {
+    return prefs;
+}
+
+void BleConnectionTracker::updatePreferences(const MicroMeshPreferences &preferences, const bool save) {
+    if (preferences.getPacketRecipientId() != getMySenderId()) {
+        LOG_DEBUG("Preferences not for us!\n");
+        return;
+    }
+    if (!prefs.getKey().empty() && prefs.getKey() != preferences.getKey()) {
+        LOG_DEBUG("Saved key missmatch - is this your device?\n");
+        return;
+    }
+    if (prefs == preferences && save) {
+        LOG_DEBUG("Update matches current preferences\n");
+        return;
+    }
+    prefs = preferences;
+    if (save) {
+        savePreferencesToFlash(prefs);
+    }
 }
 
 bool BleConnectionTracker::sendPackets() {
@@ -438,6 +489,18 @@ bool BleConnectionTracker::sendPackets() {
         };
         return std::ranges::find_if(begin, end, matches_connection) == end;
     };
+    std::set<Base *> targeted_packets_to_remove;
+    for (const auto &[packet, connection]: targeted_packets_to_send_list | std::views::filter(packet_needed)) {
+        LOG_DEBUG("Sending Targeted Packet %p, 0x%x\n", packet, connection ? connection->getConnectionHandle() : 0);
+        if (SendPacketToConnection(packet, connection)) {
+            packets_connections_sent_list.emplace(packet, connection);
+            targeted_packets_to_remove.emplace(packet);
+        }
+    }
+    for (auto packet: targeted_packets_to_remove) {
+        auto erased_sent = targeted_packets_to_send_list.erase(packet);
+        LOG_DEBUG("Erased sent %zx\n", erased_sent);
+    }
 
     std::set<Base *> broadcast_packets_to_remove;
     for (auto packet: broadcast_packets_to_send_list) {
@@ -446,7 +509,7 @@ bool BleConnectionTracker::sendPackets() {
         for (auto &connection: available_connections) {
             bool sendable = true;
             for (auto search = packets_connections_sent_list.find(packet);
-                 search != packets_connections_sent_list.end(); ++search) {
+                 sendable && search != packets_connections_sent_list.end(); ++search) {
                 if (search->second->getConnectionHandle() == connection.getConnectionHandle()) {
                     LOG_DEBUG("-");
                     sendable = false;
@@ -472,7 +535,6 @@ bool BleConnectionTracker::sendPackets() {
     broadcast_packets_to_send_list.erase(ret.begin(), ret.end());
     return true;
 }
-#pragma GCC pop_options
 
 constexpr uint64_t MESSAGE_TIMEOUT = 300000L; //5mins in ms
 
@@ -492,6 +554,76 @@ uint64_t BleConnectionTracker::getTimeMs() const {
 void BleConnectionTracker::setConnectionStarted(const BleConnection *neighbour) {
     const auto address = std::string(reinterpret_cast<const char *>(neighbour->getAddress()), BD_ADDR_LEN);
     available_neighbours.erase(address);
+}
+
+void BleConnectionTracker::setupAnnounceIfNeeded() {
+    announce.setLatitudeI(prefs.getLatitudeI());
+    announce.setLongitudeI(prefs.getLongitudeI());
+    announce.setAltitude(prefs.getAltitude());
+    if (announce.getPacketTtl() == 3) {
+        return;
+    }
+    const uint64_t sender = getMySenderId();
+    announce.setPacketTtl(3);
+    announce.setPacketFlags(0);
+    announce.setPacketSenderId(sender);
+
+    std::vector<uint8_t> buffer;
+    const BinaryWriter writer(buffer);
+    writer.write_data(reinterpret_cast<const uint8_t *>(packet_service_name), strlen(packet_service_name));
+    writer.write_data(":", 1);
+#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
+    writer.write_uint8_hex16(static_cast<uint8_t>(sender >> 48) & 0xFF);
+    writer.write_uint8_hex16(static_cast<uint8_t>(sender >> 56) & 0xFF);
+#elifdef ARDUINO_ARCH_ESP32
+    writer.write_uint8_hex16(static_cast<uint8_t>(sender >> 32) & 0xFF);
+    writer.write_uint8_hex16(static_cast<uint8_t>(sender >> 40) & 0xFF);
+#endif
+    announce.setName(std::string(reinterpret_cast<const char *>(buffer.data()), buffer.size()));
+}
+
+void BleConnectionTracker::announceToConnections() {
+    setupAnnounceIfNeeded();
+
+    auto available = [&](const BleConnection &connection) {
+        return connection.isConnected()
+#if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
+               && (connection.getPacketCharacteristicValueHandle() > 0 || connection.getRole() == HCI_ROLE_SLAVE)
+#endif
+               && weHaveTheTime();
+    };
+    auto available_connections = connections | std::views::values | std::views::filter(available);
+
+    auto announced_to = packets_connections_sent_list.equal_range(&announce);
+    auto not_announced_to = [announced_to](const BleConnection &connection) {
+        auto matches_connection = [connection](const std::pair<Base *, const BleConnection *> &sent_to) {
+            const auto &[sent_to_packet, sent_to_connection] = sent_to;
+            Announce *packetAsAnnounce = nullptr;
+            if (sent_to_packet->getPacketType() == type_announce) {
+                packetAsAnnounce = static_cast<Announce *>(sent_to_packet);
+                // LOG_DEBUG("matches_connection sender id: 0x%" PRIx64 "\n", packetAsAnnounce->getPacketSenderId());
+            }
+
+            // LOG_DEBUG("announced_to connection(0x%x), available connection(0x%x), type: %d\n",
+            //           sent_to_connection->getConnectionHandle(),
+            //           connection.getConnectionHandle(),
+            //           sent_to_packet->getPacketType());
+            return sent_to_connection->getConnectionHandle() == connection.getConnectionHandle();
+        };
+        const auto ret = std::ranges::find_if(announced_to.first, announced_to.second, matches_connection) ==
+                         announced_to.second;
+        // LOG_DEBUG("not_announced_to: %d\n", ret);
+        return ret;
+    };
+    for (auto connection: available_connections | std::views::filter(not_announced_to)) {
+        LOG_DEBUG("Announce To Connection(0x%x)\n", connection.getConnectionHandle());
+        announce.setPacketTimestamp(getTimeMs());
+        enqueueTargetedPacket(&announce, &connection);
+    }
+}
+
+size_t BleConnectionTracker::getSizeOfTargetedPacketsToSend() const {
+    return targeted_packets_to_send_list.size();
 }
 
 Announce *BleConnectionTracker::getAnyAnnounce() {
@@ -526,6 +658,7 @@ void BleConnectionTracker::cleanupStaleItems() {
         return packet->getPacketTimestamp() + ten_minutes_in_ms < now;
     };
     const auto broadcast_packets_removed = std::erase_if(broadcast_packets_to_send_list, packet_stale);
+    const auto targeted_packets_removed = std::erase_if(targeted_packets_to_send_list, packet_connection_stale);
     auto connection_stale = [now](const auto &item) {
         const auto &[key, connection] = item;
         return !connection.isConnected() && connection.getTimestampMs() + ten_minutes_in_ms < now;
@@ -542,9 +675,10 @@ void BleConnectionTracker::cleanupStaleItems() {
     });
 
     LOG_DEBUG(
-        "Cleanup items removed: connections(%zu), neighbours(%zu), announces(%zu), messages(%zu), packet con(%zu), packet peer(%zu), broadcast(%zu)\n",
+        "Cleanup items removed: connections(%zu), neighbours(%zu), announces(%zu), messages(%zu), packet con(%zu), packet peer(%zu), broadcast(%zu), targeted(%zu)\n",
         connections_removed, available_neighbours_removed, announces_removed, messages_removed,
-        packets_connections_removed, packets_peers_sent_list_removed, broadcast_packets_removed);
+        packets_connections_removed, packets_peers_sent_list_removed, broadcast_packets_removed,
+		targeted_packets_removed);
 }
 
 size_t BleConnectionTracker::getConnectionsCount() const {

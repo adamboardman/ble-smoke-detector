@@ -1,5 +1,6 @@
-#ifndef _PICO_BTSTACK_CONFIG_H
-#define _PICO_BTSTACK_CONFIG_H
+#pragma once
+//hide the PicoW code from ARDUINO builds - which ignore #pragma once's
+#ifdef PICO_BOARD
 
 #ifndef ENABLE_BLE
 #error Please link to pico_btstack_ble
@@ -55,6 +56,5 @@
 #define HCI_RESET_RESEND_TIMEOUT_MS 1000
 #define ENABLE_SOFTWARE_AES128
 #define ENABLE_MICRO_ECC_FOR_LE_SECURE_CONNECTIONS
-
 
 #endif // _PICO_BTSTACK_CONFIG_H

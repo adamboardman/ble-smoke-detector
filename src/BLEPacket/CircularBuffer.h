@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CIRCULAR_BUFFER_H
+#define CIRCULAR_BUFFER_H
 
 #include <cstring>
 #include <cassert>
@@ -236,3 +237,5 @@ inline uint16_t CircularBuffer<char>::consume_line(char *line, const uint16_t li
     tail = tail_copy;
     return written_out + line_extra;
 }
+
+#endif
