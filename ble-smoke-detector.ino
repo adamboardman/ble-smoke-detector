@@ -139,6 +139,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
       }
     }
 
+    //Note if you get a compile error here check that you've enabled EXT_ADV in the nimconfig.h as per the readme-arduino.md
     if (advertisedDevice->getSecondaryPhy() > 0) {
       LOG_DEBUG("pPhy: %d, sPhy: %d\n", advertisedDevice->getPrimaryPhy(), advertisedDevice->getSecondaryPhy());
       if (advertisedDevice->getPrimaryPhy() == BLE_HCI_LE_PHY_CODED || advertisedDevice->getSecondaryPhy() == BLE_HCI_LE_PHY_CODED) {
@@ -497,7 +498,7 @@ void setup() {
   legacyAdv.setLegacyAdvertising(true);
   legacyAdv.setFlags(BLE_HS_ADV_F_DISC_GEN);
   legacyAdv.setCompleteServices(serviceUUID);
-  legacyAdv.setName(packet_service_name);
+  legacyAdv.setName(String(ble_smoke_detector_service_name).substring(0,8).c_str());
   NimBLEExtAdvertisement legacyAdvResponse(BLE_HCI_LE_PHY_1M, BLE_HCI_LE_PHY_1M);
   legacyAdvResponse.setServiceData(serviceUUID, serviceData);
 
@@ -506,7 +507,7 @@ void setup() {
   extAdv.setScannable(false);
   extAdv.setFlags(BLE_HS_ADV_F_DISC_GEN);
   extAdv.setCompleteServices(serviceUUID);
-  extAdv.setName(packet_service_name);
+  extAdv.setName(ble_smoke_detector_service_name);
   extAdv.setServiceData(serviceUUID, serviceData);
 
   NimBLEExtAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
@@ -536,7 +537,7 @@ uint64_t lastScan = -five_minutes_in_us;  //start with a scan
 auto last_activity = global_activity;
 
 void loop() {
-  const auto loopStart = time_us_64();
+  auto loopStart = time_us_64();
   generateMessageIfNeeded();
 
   if (pBLEScan) {
@@ -550,9 +551,11 @@ void loop() {
     pBLEScan->stop();
     pBLEScan = nullptr;
     global_activity++;
+    lastScan = time_us_64();
+    loopStart = time_us_64();
   }
 
-  if (!pBLEScan && (loopStart - lastAnnounce) > two_seconds_in_us) {
+  if (!pBLEScan && connection_tracker.weHaveTheTime() && (loopStart - lastAnnounce) > two_seconds_in_us) {
     connection_tracker.announceToConnections();
     lastAnnounce = time_us_64();
   }
@@ -566,6 +569,7 @@ void loop() {
       lastAnnounce = time_us_64();
     }
     // stop sending from happening immediately
+    loopStart = time_us_64();
     lastSendPackets = time_us_64();
   }
 
@@ -576,7 +580,7 @@ void loop() {
     lastSendPackets = time_us_64();
   }
 
-  if (loopStart - lastFlash > (conn_count > 0 ? one_second_in_us : three_seconds_in_us)) {
+  if ((loopStart - lastFlash) > (conn_count > 0 ? one_second_in_us : three_seconds_in_us)) {
     digitalWrite(D6, HIGH);
     sleep_ms(10);
     digitalWrite(D6, LOW);
@@ -587,14 +591,15 @@ void loop() {
     connection_tracker.printStats();
   }
 
-  if (!pBLEScan && !connection_in_progress && loopStart - lastScan > (conn_count == 0 ? five_seconds_in_us : thirty_seconds_in_us)) {
+  if (!pBLEScan && !connection_in_progress && (loopStart - lastScan) > (conn_count == 0 ? five_seconds_in_us : thirty_seconds_in_us)) {
     start_scanning_for_local_nodes();
     lastScan = time_us_64();
     // stop sending from happening immediately
+    loopStart = time_us_64();
     lastSendPackets = time_us_64();
   }
 
-  if (digitalRead(D10) && (connection_tracker.weHaveTheTime() && !pBLEScan && !connection_in_progress && !connection_tracker.havePacketsToSend()) || (loopStart - boot_time) > five_minutes_in_us) {
+  if (digitalRead(D10) && ((connection_tracker.weHaveTheTime() && !pBLEScan && !connection_in_progress && !connection_tracker.havePacketsToSend()) || (loopStart - boot_time) > five_minutes_in_us)) {
     Serial.println("Will deep sleep in 2 seconds");
     delay(2000);
     esp_deep_sleep_start();

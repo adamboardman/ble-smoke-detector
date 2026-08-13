@@ -46,6 +46,6 @@ extern CircularBuffer<char> serialLogBuffer;
 #define LOG_TRACE(...)
 #endif
 
-void print_named_data(const char *name, const uint8_t *data, uint16_t data_size);
+void print_named_data(const char *name, const uint8_t *data, const uint16_t data_size);
 
 #endif
