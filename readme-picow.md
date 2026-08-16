@@ -87,6 +87,16 @@ I also had to set the openocd to my locally built version, 'Settings' -> 'Build,
 Development' -> Open OCD location: '/usr/local/bin/openocd'. Though it populated itself with that value once CLion
 noticed it was missing.
 
+Updating Pico SDK
+-----------------
+
+Occasionally update the Pico SDK with something like:
+```
+cd pico-sdk
+pico-sdk$ git pull
+pico-sdk$ git submodule update --recursive
+```
+
 Debugging
 ---------
 

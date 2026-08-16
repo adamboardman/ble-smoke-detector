@@ -51,6 +51,7 @@ const uint LIFE_CHECK_PIN = 18;
 
 #define BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED 0x01 /**< Connectable and scannable undirected advertising events. */
 
+
 bool keep_running = true;
 bool fresh_boot = true;
 bool smoke_seen = false;
@@ -95,6 +96,130 @@ uint16_t att_read_callback(hci_con_handle_t connection_handle, uint16_t att_hand
     return size_used_or_needed;
 }
 
+int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_handle, uint16_t transaction_mode,
+                       uint16_t offset, uint8_t *buffer, uint16_t buffer_size) {
+    UNUSED(transaction_mode);
+    // UNUSED(offset);
+    // UNUSED(buffer_size);
+    global_activity++;
+
+    LOG_DEBUG("att_write_callback(%02x,0x%02x,%d,%d,buffer,%d)\n", connection_handle, att_handle, transaction_mode,
+              offset, buffer_size);
+    //print_named_data("att write buffer in", buffer, buffer_size);
+
+    if (transaction_mode != ATT_TRANSACTION_MODE_NONE) {
+        switch (transaction_mode) {
+            case ATT_TRANSACTION_MODE_ACTIVE:
+                LOG_DEBUG("att_write_callback - ATT_TRANSACTION_MODE_ACTIVE\n");
+                break;
+            case ATT_TRANSACTION_MODE_EXECUTE:
+                LOG_DEBUG("att_write_callback - ATT_TRANSACTION_MODE_EXECUTE\n");
+                break;
+            case ATT_TRANSACTION_MODE_CANCEL:
+                LOG_DEBUG("att_write_callback - ATT_TRANSACTION_MODE_CANCEL\n");
+                break;
+            case ATT_TRANSACTION_MODE_VALIDATE:
+                LOG_DEBUG("att_write_callback - ATT_TRANSACTION_MODE_VALIDATE\n");
+                break;
+            default:
+                break;
+        }
+        return 0;
+    }
+    const auto context = connection_tracker.connectionForConnHandle(connection_handle);
+
+    switch (att_handle) {
+        case ATT_CHARACTERISTIC_a8d99167_e58c_4a0c_9565_e2f1a7fbc05d_01_CLIENT_CONFIGURATION_HANDLE: {
+            context->setNotificationEnabled(
+                little_endian_read_16(buffer, 0) == GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION);
+            if (context->getNotificationEnabled()) {
+                switch (att_handle) {
+                    case ATT_CHARACTERISTIC_a8d99167_e58c_4a0c_9565_e2f1a7fbc05d_01_CLIENT_CONFIGURATION_HANDLE:
+                        context->setPacketCharacteristicValueHandle(
+                            ATT_CHARACTERISTIC_a8d99167_e58c_4a0c_9565_e2f1a7fbc05d_01_VALUE_HANDLE);
+                        break;
+                    default:
+                        break;
+                }
+            }
+            break;
+        }
+        case ATT_CHARACTERISTIC_a8d99167_e58c_4a0c_9565_e2f1a7fbc05d_01_VALUE_HANDLE: {
+            LOG_DEBUG("write from a packet connection - offset: %d, buffer_size: %d\n", offset, buffer_size);
+            print_named_data("att write buffer in", buffer, buffer_size);
+            processor.processWrite(context, offset, buffer, buffer_size);
+            break;
+        }
+        default:
+            LOG_DEBUG("BLE Service: Unsupported write to 0x%02x, len %u\n", att_handle, buffer_size);
+            break;
+    }
+    return 0;
+}
+
+static uint8_t adv_data[BLE_ADVERTISING_MAX_LENGTH];
+uint8_t adv_data_len = 0;
+static uint8_t scan_response_data[BLE_ADVERTISING_MAX_LENGTH];
+uint8_t scan_response_data_len = 0;
+
+void populate_advertising_data() {
+    //ADV_IND - It allows for up to 31 bytes of advertising data in the main packet payload.
+
+    //0xXX (the length of the subsequent data, {d0(type), d01-dXX}
+    adv_data[adv_data_len++] = 0x2;
+    adv_data[adv_data_len++] = BLUETOOTH_DATA_TYPE_FLAGS;
+    adv_data[adv_data_len++] = BLE_FLAGS_LE_ONLY_GENERAL_DISC_MODE;
+
+    adv_data[adv_data_len++] = 17;
+    adv_data[adv_data_len++] = BLUETOOTH_DATA_TYPE_INCOMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS;
+    memcpy(&adv_data[adv_data_len], packet_service_uuid_reversed, sizeof(packet_service_uuid_reversed));
+    adv_data_len += sizeof(packet_service_uuid_reversed);
+
+    const uint8_t name_len = strlen(ble_smoke_detector_service_name);
+    const auto fitable_name_len = std::min(static_cast<uint8_t>(BLE_ADVERTISING_MAX_LENGTH - adv_data_len - 2),
+                                           name_len);
+    adv_data[adv_data_len++] = fitable_name_len + 1;
+    if (fitable_name_len == name_len) {
+        adv_data[adv_data_len++] = BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME;
+    } else {
+        adv_data[adv_data_len++] = BLUETOOTH_DATA_TYPE_SHORTENED_LOCAL_NAME;
+    }
+    memcpy(&adv_data[adv_data_len], ble_smoke_detector_service_name, fitable_name_len);
+    adv_data_len += fitable_name_len;
+
+    //setup scan response data
+    const uint64_t sender = connection_tracker.getMySenderId();
+    std::vector<uint8_t> serviceData;
+    const BinaryWriter buffer(serviceData);
+    buffer.write_uint64(sender);
+    const auto sender_id_len = std::min(static_cast<uint8_t>(BLE_ADVERTISING_MAX_LENGTH - 18 - 2),
+                                        static_cast<uint8_t>(serviceData.size()));
+
+    scan_response_data[scan_response_data_len++] = 17 + sender_id_len;
+    scan_response_data[scan_response_data_len++] = BLUETOOTH_DATA_TYPE_SERVICE_DATA_128_BIT_UUID;
+    memcpy(&scan_response_data[scan_response_data_len], packet_service_uuid_reversed,
+           sizeof(packet_service_uuid_reversed));
+    scan_response_data_len += sizeof(packet_service_uuid_reversed);
+
+    memcpy(&scan_response_data[scan_response_data_len], serviceData.data(), fitable_name_len);
+    scan_response_data_len += fitable_name_len;
+    ASSERT_DEBUG(scan_response_data_len <= 31);
+}
+
+void setup_advertisements() {
+    populate_advertising_data();
+
+    // setup advertisements - units each of 625us
+    constexpr uint16_t adv_int_min = 30000 / 625; // 0.03 second
+    constexpr uint16_t adv_int_max = 40000 / 625; // 0.04 second
+    constexpr uint8_t adv_type = 0;
+    bd_addr_t null_addr = {};
+    gap_advertisements_set_params(adv_int_min, adv_int_max, adv_type, 0, null_addr, 0x07, 0x00);
+    gap_advertisements_set_data(adv_data_len, adv_data);
+    gap_scan_response_set_data(scan_response_data_len, scan_response_data);
+    gap_advertisements_enable(1);
+}
+
 void start_scanning_for_local_nodes() {
     LOG_DEBUG("start_scanning_for_local_nodes\n");
     gap_start_scan();
@@ -109,7 +234,7 @@ void setup_scanning() {
     //100% (scan interval = scan window)
     //could change to only scan once every 10 mins or so - we don't expect a static set
     //of devices strategically placed to appear and disappear too often
-    gap_set_scan_params(0, 0x0030, 0x0030, 0);
+    gap_set_scan_params(1, 0x0030, 0x0030, 0);
     gap_set_scan_duplicate_filter(true);
     start_scanning_for_local_nodes();
 }
@@ -432,6 +557,7 @@ void hci_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             gap_local_bd_addr(local_addr);
             LOG_DEBUG("BTstack up and running on: %s\n", bd_addr_to_str(local_addr));
             gap_set_max_number_peripheral_connections(4); //will bump up sometime?
+            setup_advertisements();
             setup_scanning();
             break;
         }
@@ -726,7 +852,7 @@ void reduce_clock(const uint32_t speed) {
 void generateMessageIfNeeded() {
     std::vector<uint8_t> outBuffer;
     uint64_t timestamp_ms = connection_tracker.getTimeMs();
-	bool copy_fresh_boot = fresh_boot;
+    bool copy_fresh_boot = fresh_boot;
     bool copy_smoke_seen = smoke_seen;
     bool copy_life_check = life_check;
     if (connection_tracker.weHaveTheTime() && (copy_fresh_boot || copy_smoke_seen || copy_life_check)) {
@@ -750,9 +876,9 @@ void generateMessageIfNeeded() {
             life_check = false;
         }
         if (copy_smoke_seen) {
-        if (copy_life_check) {
-            buffer.write_uint8('+');
-        }
+            if (copy_life_check) {
+                buffer.write_uint8('+');
+            }
             const std::string smoke_seen_string = "Smoke seen";
             buffer.write_data(smoke_seen_string, smoke_seen_string.size());
             smoke_seen = false;
@@ -764,7 +890,7 @@ void generateMessageIfNeeded() {
         const uint64_t minutes = seconds / 60;
         timestamp_ms = minutes * 60 * 1000;
 
-        Message message(4, timestamp_ms, 0, sender, 0);
+        Message message(3, timestamp_ms, 0, sender, 0);
         message.setContent(messageContentString);
         outBuffer.clear();
         buffer.write_uint64(timestamp_ms);
@@ -785,9 +911,9 @@ void generateMessageIfNeeded() {
         message.setChannel("#smoke");
 
         auto prefs = connection_tracker.getPreferences();
-        message.setLatitudeI(prefs.getLatitudeI());
-        message.setLongitudeI(prefs.getLongitudeI());
-        message.setAltitude(prefs.getAltitude());
+        message.setLatitudeI(prefs->getLatitudeI());
+        message.setLongitudeI(prefs->getLongitudeI());
+        message.setAltitude(prefs->getAltitude());
 
         std::vector<uint8_t> name_buffer;
         const BinaryWriter name_writer(name_buffer);
@@ -879,8 +1005,7 @@ void setup_keep_alive_pin() {
 }
 
 int main() {
-    bi_decl(bi_program_description(
-        "BLE Smoke Detector - designed to be powered up by a smoke detector."));
+    bi_decl(bi_program_description("BLE Smoke Detector - designed to be powered up by a smoke detector."));
     bi_decl(bi_1pin_with_name(EXIT_GPIO_PIN, "Switch - pull to ground to exit the loop and return to usb-disk mode"));
     bi_decl(bi_1pin_with_name(SMOKE_SEEN_PIN, "Input - we pull this down, will be pulled up to indicate smoke has been detected"));
     bi_decl(bi_1pin_with_name(LIFE_CHECK_PIN, "Switch - pull to ground to send a still alive message"));
@@ -909,7 +1034,24 @@ int main() {
             __wfi();
         }
     }
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
 
+    const auto flash_target_contents = reinterpret_cast<const uint8_t *>((XIP_BASE + FLASH_TARGET_OFFSET));
+    BinaryReader reader(0, flash_target_contents, FLASH_SECTOR_SIZE);
+    const auto version = reader.read_uint8();
+    const auto prefs_type = reader.read_uint8();
+    if (version == 1 && prefs_type == type_micro_mesh_preferences) {
+        if (const MicroMeshPreferences preferences(version, reader); !preferences.isMalformed()) {
+            connection_tracker.updatePreferences(preferences);
+            printf("Preferences read from flash - SSID: %s, Lat: %d\n", preferences.getSsid().c_str(), preferences.getLatitudeI());
+        } else {
+            printf("Malformed preferences found\n");
+        }
+    } else {
+        printf("No preferences stored\n");
+    }
+    printAvailableLogging();
+    auto prefs = connection_tracker.getPreferences();
     printf("l2cap_init()\n");
     l2cap_init();
 
@@ -922,6 +1064,9 @@ int main() {
 
     // printf("enable btstack hci logging\n");
     // hci_dump_init(hci_dump_embedded_stdout_get_instance());
+
+    //printf("att_server_init()\n");
+    att_server_init(profile_data, att_read_callback, att_write_callback);
 
     //printf("inform about BTstack state");
     hci_event_callback_registration.callback = &hci_packet_handler;
@@ -945,44 +1090,55 @@ int main() {
         }
     }
 
+    uint64_t lastCleanup = time_us_64() + five_minutes_in_us; //gives 15mins before first cleanup
     uint64_t lastSleepOrActivity = time_us_64();
-    uint64_t lastFlash = 0;
     uint64_t boot_time = time_us_64();
     uint64_t last_try_to_off = time_us_64();
+    uint64_t lastAnnounce = time_us_64();
+    uint64_t lastSendPackets = time_us_64();
+    uint64_t lastConnection = time_us_64();
+    uint64_t lastFlash = 0;
     uint64_t lastScan = time_us_64();
-    uint64_t lastRssiUpdate = time_us_64();
-    bool rssi_update_in_progress = false;
-    uint64_t lastCleanup = time_us_64() + five_minutes_in_us; //gives 15mins before first cleanup
     auto last_activity = global_activity;
     while (keep_running) {
-        const auto loopStart = time_us_64();
+        auto loopStart = time_us_64();
         printAvailableLogging();
+        cyw43_arch_poll();
         generateMessageIfNeeded();
-        if (!scanning && !connection_in_progress && !discover_primary_services && !discover_characteristics_for_service
-            && disconnection_started_at < loopStart - two_seconds_in_us) {
-            if (const auto connecting = connect_to_first_neighbour(); !connecting) {
-                // if (const auto duplicate = connection_tracker.getAnyDuplicateHandle()) {
-                //     if (gap_disconnect(duplicate) == ERROR_CODE_SUCCESS) {
-                //         disconnection_started_at = time_us_64();
-                //     }
-                // }
-            }
+        if (!scanning && connection_tracker.weHaveTheTime() && (loopStart - lastAnnounce) > two_seconds_in_us) {
+            connection_tracker.announceToConnections();
+            lastAnnounce = time_us_64();
         }
-        if (last_activity != global_activity) {
-            connection_tracker.printStats();
+
+        if (!scanning && !connection_in_progress && (loopStart - lastConnection) > three_seconds_in_us && !
+            discover_primary_services && !discover_characteristics_for_service) {
+            const auto connecting = connect_to_first_neighbour();
+            lastConnection = time_us_64();
+            if (connecting) {
+                //stop us giving an announcement directly after connection as it will probably be missed
+                lastAnnounce = time_us_64();
+            }
+            // stop sending from happening immediately
+            loopStart = time_us_64();
+            lastSendPackets = time_us_64();
         }
         printAvailableLogging();
-        connection_tracker.sendPackets();
+        if (!scanning && !connection_in_progress && (loopStart - lastSendPackets) > one_second_in_us) {
+            if (connection_tracker.sendPackets()) {
+                global_activity++;
+            }
+            lastSendPackets = time_us_64();
+        }
         printAvailableLogging();
 
-        if (loopStart - lastFlash > (conn_count > 0 ? one_second_in_us : three_seconds_in_us)) {
+        if ((loopStart - lastFlash) > (conn_count > 0 ? one_second_in_us : three_seconds_in_us)) {
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
             sleep_ms(10);
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
             lastFlash = time_us_64();
         }
         if ((loopStart - last_try_to_off) > twenty_seconds_in_us) {
-			//auto-turn off if we have nothing to broadcast
+            //auto-turn off if we have nothing to broadcast
             if (!connection_tracker.havePacketsToSend() || (loopStart - boot_time) > five_minutes_in_us) {
                 if (gpio_is_pulled_down(KEEP_ALIVE_PIN)) {
                     LOG_DEBUG("We don't need to be kept alive");
@@ -991,16 +1147,15 @@ int main() {
             } else {
                 last_try_to_off = time_us_64();
             }
-		}
-        if ((loopStart - lastRssiUpdate) > five_minutes_in_us) {
-            rssi_update_in_progress = connection_tracker.requestNextRssi(true);
-            lastRssiUpdate = time_us_64();
-        } else if (rssi_update_in_progress) {
-            rssi_update_in_progress = connection_tracker.requestNextRssi(false);
         }
-        if ((loopStart - lastScan) > thirty_seconds_in_us) {
+        if (!scanning && !connection_in_progress && (loopStart - lastScan) > (conn_count == 0
+                                                                                  ? five_seconds_in_us
+                                                                                  : thirty_seconds_in_us)) {
             start_scanning_for_local_nodes();
             lastScan = time_us_64();
+            // stop sending from happening immediately
+            loopStart = time_us_64();
+            lastSendPackets = time_us_64();
         }
         if ((loopStart - lastCleanup) > ten_minutes_in_us) {
             connection_tracker.cleanupStaleItems();
@@ -1008,10 +1163,13 @@ int main() {
         }
 
         if (last_activity != global_activity) {
+            connection_tracker.printStats();
             lastSleepOrActivity = time_us_64();
             last_activity = global_activity;
         }
-        best_effort_wfe_or_timeout(make_timeout_time_ms(100));
+        printAvailableLogging();
+        sleep_ms(40);
+        //best_effort_wfe_or_timeout(make_timeout_time_ms(100));
     }
 }
 

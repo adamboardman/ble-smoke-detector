@@ -445,8 +445,8 @@ uint64_t BleConnectionTracker::getMySenderId() {
     return sender;
 }
 
-MicroMeshPreferences &BleConnectionTracker::getPreferences() {
-    return prefs;
+MicroMeshPreferences *BleConnectionTracker::getPreferences() {
+    return &prefs;
 }
 
 void BleConnectionTracker::updatePreferences(const MicroMeshPreferences &preferences, const bool save) {
@@ -526,6 +526,7 @@ bool BleConnectionTracker::sendPackets() {
 
         if (connections_exist) {
             broadcast_packets_to_remove.emplace(packet);
+            break;
         }
     }
     auto sent = [broadcast_packets_to_remove](Base *packet) {

@@ -16,10 +16,10 @@
 // #define ENABLE_LE_EXTENDED_ADVERTISING //not supported
 // #define ENABLE_LE_PERIODIC_ADVERTISING //not supported
 #define ENABLE_L2CAP_LE_CREDIT_BASED_FLOW_CONTROL_MODE
-#define ENABLE_LE_PERIPHERAL //Seem to need to define this even if we are never doing adverts or controlling connections
+#define ENABLE_LE_PERIPHERAL
 
-#define ENABLE_LE_CENTRAL //Nonsensical naming - We are a device that is usually off, so we act as a central to initiate connections
-#define MAX_NR_GATT_CLIENTS 1
+#define ENABLE_LE_CENTRAL
+#define MAX_NR_GATT_CLIENTS 6 //was 1
 
 // BTstack configuration. buffers, sizes, ...
 #define HCI_OUTGOING_PRE_BUFFER_SIZE 4

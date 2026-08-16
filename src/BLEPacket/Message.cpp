@@ -137,13 +137,13 @@ uint8_t Message::getMessageFlags() const {
 uint32_t Message::getPayloadLength() {
     if (Base::getPayloadLength() > 0) return Base::getPayloadLength();
     uint32_t len = 0;
-    if (message_id.size() > 0) len += variableLength(tlv_message_id, message_id.size());
-    if (sender_nickname.size() > 0) len += variableLength(tlv_message_sender_nickname, sender_nickname.size());
-    if (channel.size() > 0) {
+    if (!message_id.empty()) len += variableLength(tlv_message_id, message_id.size());
+    if (!sender_nickname.empty()) len += variableLength(tlv_message_sender_nickname, sender_nickname.size());
+    if (!channel.empty()) {
         len += variableLength(tlv_message_channel, channel.size());
-        if (content.size() > 0) len += variableLength(tlv_message_channel_content, content.size());
+        if (!content.empty()) len += variableLength(tlv_message_channel_content, content.size());
     } else {
-        if (content.size() > 0) len += variableLength(tlv_message_content, content.size());
+        if (!content.empty()) len += variableLength(tlv_message_content, content.size());
     }
     if (message_flags > 0) len += variableLength(tlv_message_flags, sizeof(uint8_t));
     if (reply_id > 0) len += variableLength(tlv_message_reply_to_id, sizeof(uint32_t));
@@ -155,16 +155,16 @@ uint32_t Message::getPayloadLength() {
 }
 
 void Message::writePacketPayload(BinaryWriter &writer) {
-    if (message_id.size() > 0) {
+    if (!message_id.empty()) {
         writeVariable(writer, tlv_message_id, message_id);
     }
-    if (sender_nickname.size() > 0) {
+    if (!sender_nickname.empty()) {
         writeVariable(writer, tlv_message_sender_nickname, sender_nickname);
     }
-    if (channel.size() > 0 && content.size() > 0) {
+    if (!channel.empty() && !content.empty()) {
         writeVariable(writer, tlv_message_channel, channel);
         writeVariable(writer, tlv_message_channel_content, content);
-    } else if (content.size() > 0) {
+    } else if (!content.empty()) {
         writeVariable(writer, tlv_message_content, content);
     }
     if (message_flags > 0) {
@@ -173,9 +173,16 @@ void Message::writePacketPayload(BinaryWriter &writer) {
     if (reply_id > 0) {
         writeVariable(writer, tlv_message_reply_to_id, reply_id);
     }
-    if (latitude_i != 0) writeVariable(writer, tlv_message_location_latitude, latitude_i);
-    if (longitude_i != 0) writeVariable(writer, tlv_message_location_longitude, longitude_i);
-    if (altitude != 0) writeVariable(writer, tlv_message_location_altitude, altitude);
+    if (latitude_i != 0) {
+        LOG_DEBUG("Message contains latitude: %d\n", latitude_i);
+        writeVariable(writer, tlv_message_location_latitude, latitude_i);
+    }
+    if (longitude_i != 0) {
+        writeVariable(writer, tlv_message_location_longitude, longitude_i);
+    }
+    if (altitude != 0) {
+        writeVariable(writer, tlv_message_location_altitude, altitude);
+    }
 }
 
 void Message::setLatitudeI(const int32_t value) {

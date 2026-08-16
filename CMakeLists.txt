@@ -40,6 +40,7 @@ add_executable(ble_smoke_detector main.cpp
 )
 
 include_directories(
+        include
         src/BLEPacket
 )
 
@@ -50,10 +51,12 @@ target_link_libraries(ble_smoke_detector
         pico_stdlib
         pico_btstack_ble
         pico_btstack_cyw43
-        pico_cyw43_arch_none
+        pico_cyw43_arch_lwip_poll
+        pico_flash
         hardware_gpio
         hardware_adc
         hardware_pwm
+        hardware_flash
 )
 
 target_include_directories(ble_smoke_detector PRIVATE

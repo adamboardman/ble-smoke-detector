@@ -105,9 +105,9 @@ void generateMessageIfNeeded() {
     message.setChannel("#smoke");
 
     auto prefs = connection_tracker.getPreferences();
-    message.setLatitudeI(prefs.getLatitudeI());
-    message.setLongitudeI(prefs.getLongitudeI());
-    message.setAltitude(prefs.getAltitude());
+    message.setLatitudeI(prefs->getLatitudeI());
+    message.setLongitudeI(prefs->getLongitudeI());
+    message.setAltitude(prefs->getAltitude());
 
     std::vector<uint8_t> name_buffer;
     const BinaryWriter name_writer(name_buffer);
@@ -231,6 +231,7 @@ void ARDUINO_ISR_ATTR isr(void *arg) {
   InputPin *s = static_cast<InputPin *>(arg);
   s->numberChanges += 1;
   s->state = digitalRead(s->PIN);
+  global_activity++;
 }
 
 class ServerCallbacks : public NimBLEServerCallbacks {
@@ -423,7 +424,7 @@ bool connect_to_first_neighbour() {
   return false;
 }
 
-void savePreferencesToFlash(MicroMeshPreferences &prefs)  {
+void savePreferencesToFlash(MicroMeshPreferences &prefs) {
   Preferences preferences;
   preferences.begin("micro-mesh", false);
   preferences.putString("key", prefs.getKey().c_str());
@@ -437,23 +438,23 @@ void savePreferencesToFlash(MicroMeshPreferences &prefs)  {
 }
 
 void setup() {
-  setCpuFrequencyMhz(80);
+  setCpuFrequencyMhz(80);  // The Lowest whilst still supporting BLE
 
   auto prefs = connection_tracker.getPreferences();
   Preferences preferences;
-  preferences.begin("micro-mesh", false);
-  prefs.setKey(preferences.getString("key").c_str());
-  prefs.setSsid(preferences.getString("ssid").c_str());
-  prefs.setPassword(preferences.getString("password").c_str());
-  prefs.setLatitudeI(preferences.getInt("latitude_i"));
-  prefs.setLongitudeI(preferences.getInt("longitude_i"));
-  prefs.setAltitude(preferences.getInt("altitude"));
+  preferences.begin("micro-mesh", true);
+  prefs->setKey(preferences.getString("key").c_str());
+  prefs->setSsid(preferences.getString("ssid").c_str());
+  prefs->setPassword(preferences.getString("password").c_str());
+  prefs->setLatitudeI(preferences.getInt("latitude_i"));
+  prefs->setLongitudeI(preferences.getInt("longitude_i"));
+  prefs->setAltitude(preferences.getInt("altitude"));
   preferences.end();
 
   Serial.begin(115200);
 
-  Serial.print("Loaded saved preferences with ssid: ");
-  Serial.println(prefs.getSsid().c_str());
+  Serial.print("Loaded saved preferences with lat: ");
+  Serial.println(prefs->getLatitudeI());
 
   boot_time = time_us_64();
 
@@ -599,18 +600,17 @@ void loop() {
     lastSendPackets = time_us_64();
   }
 
-  if (digitalRead(D10) && ((connection_tracker.weHaveTheTime() && !pBLEScan && !connection_in_progress && !connection_tracker.havePacketsToSend()) || (loopStart - boot_time) > five_minutes_in_us)) {
-    Serial.println("Will deep sleep in 2 seconds");
-    delay(2000);
-    esp_deep_sleep_start();
-  }
-
   if (last_activity != global_activity) {
     last_activity = global_activity;
   }
 
-  // Serial.printf("Input D0 state %d, changes: %" PRIu32 " times\n", inputD0smoke.state, inputD0smoke.numberChanges);
-  // Serial.printf("Input D0 state %d\n", digitalRead(D0));
-
+  if (digitalRead(D10) && ((connection_tracker.weHaveTheTime() && !pBLEScan && !connection_in_progress && !connection_tracker.havePacketsToSend()) || (loopStart - boot_time) > five_minutes_in_us)) {
+    Serial.println("Will deep sleep in 2 seconds if no activity");
+    delay(2000);
+    if (last_activity == global_activity) {
+      esp_sleep_enable_timer_wakeup(forty_eight_hours_in_us);
+      esp_deep_sleep_start();
+    }
+  }
   delay(1000);
 }
