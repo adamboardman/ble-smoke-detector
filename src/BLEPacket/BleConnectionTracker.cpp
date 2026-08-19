@@ -337,6 +337,10 @@ void BleConnectionTracker::printStats() {
 }
 
 bool BleConnectionTracker::SendPacketToConnection(Base *packet, BleConnection *ble_connection) {
+    if (packet->getSendingConnectionHandle() > 0 && packet->getSendingConnectionHandle() == ble_connection->getConnectionHandle()) {
+        return true; //packet effectively already sent to this connection as that is where it came from
+    }
+
     std::vector<uint8_t> packet_data;
     packet->writePacket(packet_data);
 
@@ -571,7 +575,7 @@ void BleConnectionTracker::setupAnnounceIfNeeded() {
 
     std::vector<uint8_t> buffer;
     const BinaryWriter writer(buffer);
-    writer.write_data(reinterpret_cast<const uint8_t *>(ble_smoke_detector_service_name), strlen(packet_service_name));
+    writer.write_data(reinterpret_cast<const uint8_t *>(ble_smoke_detector_service_name), strlen(ble_smoke_detector_service_name));
     writer.write_data(":", 1);
 #if defined(PICO_BOARD) || defined(MOCK_PICO_PI)
     writer.write_uint8_hex16(static_cast<uint8_t>(sender >> 48) & 0xFF);

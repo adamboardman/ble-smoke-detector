@@ -42,6 +42,10 @@ public:
 
     void setPacketFlags(uint8_t flags);
 
+    void setSendingConnectionHandle(uint16_t handle);
+
+    uint16_t getSendingConnectionHandle();
+
     [[nodiscard]] bool hasPacketRecipient() const {
         return (getPacketFlags() & packet_flag_has_recipient) != 0;
     }
@@ -106,6 +110,7 @@ private:
     uint8_t packet_ttl = 0;
     uint64_t packet_timestamp_ms = 0;
     uint8_t packet_flags = 0;
+    uint16_t sending_connection_handle = 0;
     uint32_t payload_length = 0;
     uint64_t packet_sender_id = 0;
     uint64_t packet_recipient_id = 0;

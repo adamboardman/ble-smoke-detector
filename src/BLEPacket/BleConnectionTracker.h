@@ -24,7 +24,7 @@ inline auto ten_minutes_in_us = 1000 * 1000 * 60 * 10;
 inline auto ten_minutes_in_ms = 1000 * 60 * 10;
 inline auto one_hour_in_ms = 1000 * 60 * 60;
 inline auto twenty_four_hours_in_ms = 1000 * 60 * 60 * 24;
-inline uint64_t forty_eight_hours_in_us = 1000ull * 1000 * 60 * 60 * 24 * 2;
+inline uint64_t forty_eight_hours_in_us = 1000llu * 1000 * 60 * 60 * 24 * 2;
 
 extern void savePreferencesToFlash(MicroMeshPreferences &prefs);
 

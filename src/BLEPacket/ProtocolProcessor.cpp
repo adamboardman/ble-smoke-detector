@@ -27,7 +27,7 @@ const char *ProtocolProcessor::stringForType(const uint8_t type) {
     }
 }
 
-void ProtocolProcessor::updateOrStorePeerNameFromAnnouncement(Announce &announce, BleConnection *connection) const {
+void ProtocolProcessor::updateOrStorePeerNameFromAnnouncement(const Announce &announce, const BleConnection *connection) const {
     const auto peer = ble_connection_tracker.checkSenderInPeers(announce.getPacketSenderId());
     peer->setConnectionHandle(connection->getConnectionHandle());
     peer->updateName(announce.getName());
@@ -51,6 +51,7 @@ void ProtocolProcessor::processWrite(BleConnection *connection, const uint16_t o
     switch (type) {
         case type_announce: {
             Announce announce(version, reader);
+            announce.setSendingConnectionHandle(connection->getConnectionHandle());
             updateOrStorePeerNameFromAnnouncement(announce, connection);
             ble_connection_tracker.possiblyUpdateTimeOffset(announce.getPacketTimestamp());
             if (const auto stored_announce = ble_connection_tracker.storeAnnounceAndReturnIfNew(announce)) {
@@ -64,6 +65,7 @@ void ProtocolProcessor::processWrite(BleConnection *connection, const uint16_t o
         }
         case type_message: {
             Message message(version, reader);
+            message.setSendingConnectionHandle(connection->getConnectionHandle());
             if (const auto stored_message = ble_connection_tracker.storeMessageAndReturnIfNew(message)) {
                 if (const auto newTtl = stored_message->getPacketTtl()-1; newTtl > 0) {
                     stored_message->setPacketTtl(newTtl);

@@ -15,7 +15,7 @@ public:
 
     static const char *stringForType(uint8_t type);
 
-    void updateOrStorePeerNameFromAnnouncement(Announce &announce, BleConnection *connection) const;
+    void updateOrStorePeerNameFromAnnouncement(const Announce &announce, const BleConnection *connection) const;
 
     void processWrite(BleConnection *connection, uint16_t offset, const uint8_t *buffer, uint16_t buffer_size) const;
 

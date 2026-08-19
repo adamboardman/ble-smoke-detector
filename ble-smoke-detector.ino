@@ -517,7 +517,7 @@ void setup() {
   if (!pAdvertising->setInstanceData(0, legacyAdv)) {
     Serial.printf("Failed to register advertisement data - legacyAdv\n");
   }
-  if (!pAdvertising->setInstanceData(1, extAdv)){
+  if (!pAdvertising->setInstanceData(1, extAdv)) {
     Serial.printf("Failed to register advertisement data - extAdv\n");
   }
   if (!pAdvertising->setScanResponseData(0, legacyAdvResponse)) {
@@ -581,7 +581,7 @@ void loop() {
     lastSendPackets = time_us_64();
   }
 
-  if ((loopStart - lastFlash) > (conn_count > 0 ? one_second_in_us : three_seconds_in_us)) {
+  if ((loopStart - lastFlash) > ((conn_count > 0) ? one_second_in_us : three_seconds_in_us)) {
     digitalWrite(D6, HIGH);
     sleep_ms(10);
     digitalWrite(D6, LOW);

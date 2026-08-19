@@ -108,6 +108,14 @@ void Base::setPacketFlags(const uint8_t flags) {
     packet_flags = flags;
 }
 
+void Base::setSendingConnectionHandle(const uint16_t handle) {
+    sending_connection_handle = handle;
+}
+
+uint16_t Base::getSendingConnectionHandle() {
+    return sending_connection_handle;
+}
+
 void Base::setPacketType(const PacketType type) {
     packet_type = type;
 }

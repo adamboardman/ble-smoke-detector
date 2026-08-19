@@ -1168,8 +1168,7 @@ int main() {
             last_activity = global_activity;
         }
         printAvailableLogging();
-        sleep_ms(40);
-        //best_effort_wfe_or_timeout(make_timeout_time_ms(100));
+        best_effort_wfe_or_timeout(make_timeout_time_ms(50));
     }
 }
 
